@@ -1,0 +1,101 @@
+from collections import defaultdict
+from uuid import UUID
+
+from material_platform.domain.discovery import DiscoveryManifest, DiscoveryNode
+from material_platform.domain.enums import DiscoveryRole
+from material_platform.domain.material import Material
+from material_platform.domain.source import Source
+
+
+def format_ingest_report(
+    source: Source,
+    manifest: DiscoveryManifest,
+    materials: tuple[Material, ...],
+) -> str:
+    labels = _assign_labels(manifest.nodes)
+    children = _children(manifest.nodes)
+    lines = ["SOURCE", f"S1 {source.original_name}", "", "DISCOVERY"]
+
+    roots = children.get(None, [])
+    for node in roots:
+        lines.extend(_render(node, children, labels, prefix="", is_last=True))
+
+    lines.extend(["", "MATERIALS"])
+    material_by_path = {item.root_path: item for item in materials}
+    for node in manifest.nodes:
+        if node.role is not DiscoveryRole.MATERIAL:
+            continue
+        material = material_by_path.get(node.path)
+        kind = _candidate_kind(node, material)
+        lines.append(f"{labels[node.node_id]} {kind} candidate")
+
+    return "\n".join(lines) + "\n"
+
+
+def _candidate_kind(node: DiscoveryNode, material: Material | None) -> str:
+    if material is not None:
+        return material.material_type.value
+    hint = node.metadata.get("material_hint")
+    if not isinstance(hint, str):
+        return "unknown"
+    if hint.endswith("_project"):
+        return "project"
+    if hint == "csv_dataset":
+        return "dataset"
+    return hint
+
+
+def _children(
+    nodes: tuple[DiscoveryNode, ...],
+) -> dict[UUID | None, list[DiscoveryNode]]:
+    mapping: dict[UUID | None, list[DiscoveryNode]] = defaultdict(list)
+    for node in nodes:
+        mapping[node.parent_node_id].append(node)
+    return mapping
+
+
+def _assign_labels(nodes: tuple[DiscoveryNode, ...]) -> dict[UUID, str]:
+    labels: dict[UUID, str] = {}
+    containers = 0
+    materials = 0
+    for node in nodes:
+        if node.role is DiscoveryRole.MATERIAL:
+            materials += 1
+            labels[node.node_id] = f"M{materials}"
+        else:
+            containers += 1
+            labels[node.node_id] = f"C{containers}"
+    return labels
+
+
+def _render(
+    node: DiscoveryNode,
+    children: dict[UUID | None, list[DiscoveryNode]],
+    labels: dict[UUID, str],
+    *,
+    prefix: str,
+    is_last: bool,
+) -> list[str]:
+    label = labels[node.node_id]
+    role = node.role.value.upper()
+    if prefix == "" and node.parent_node_id is None:
+        line = f"{label} {node.path:<28} {role}"
+        child_prefix = ""
+    else:
+        branch = "└── " if is_last else "├── "
+        line = f"{prefix}{branch}{label} {node.path:<28} {role}"
+        child_prefix = prefix + ("    " if is_last else "│   ")
+
+    lines = [line]
+    kids = children.get(node.node_id, [])
+    for index, child in enumerate(kids):
+        lines.extend(
+            _render(
+                child,
+                children,
+                labels,
+                prefix=child_prefix,
+                is_last=index == len(kids) - 1,
+            )
+        )
+    return lines
