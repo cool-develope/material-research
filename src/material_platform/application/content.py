@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID
 
 from material_platform.discovery.skips import is_skipped_name
+from material_platform.extraction.common import MaterialFile
 from material_platform.infrastructure.object_store.digest import sha256_stream
 from material_platform.infrastructure.object_store.paths import (
     material_content,
@@ -76,3 +77,21 @@ def copy_material_content(
         content_type="application/json",
     )
     return digest
+
+
+def load_material_files(
+    store: ObjectStore, material_id: UUID
+) -> tuple[MaterialFile, ...]:
+    with store.open(material_content_manifest(material_id)) as handle:
+        manifest = json.load(handle)
+    files = manifest.get("files", [])
+    if not isinstance(files, list):
+        return ()
+    loaded: list[MaterialFile] = []
+    for entry in files:
+        if not isinstance(entry, dict):
+            continue
+        path = str(entry["path"])
+        with store.open(material_content(material_id, path)) as handle:
+            loaded.append(MaterialFile(path=path, data=handle.read()))
+    return tuple(loaded)

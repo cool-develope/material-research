@@ -1,5 +1,26 @@
 from pathlib import Path
+from shutil import rmtree
 from zipfile import ZipFile
+
+from tests.unit.helpers.pdf import build_text_pdf
+
+COMPLEX_MATERIALS = (
+    "README.md",
+    "code/backend/",
+    "frontend/",
+    "lab/dataset/",
+    "notes.txt",
+    "papers/methods.md",
+    "papers/survey.pdf",
+    "shared.py",
+    "snippet.py",
+    "stats.csv",
+    "tools/cli/",
+)
+
+FIXTURE_ZIP = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "mixed_zip" / "research.zip"
+)
 
 
 def make_python_project(path: Path) -> Path:
@@ -22,11 +43,80 @@ def make_dataset(path: Path) -> Path:
     return path
 
 
+def make_node_project(path: Path) -> Path:
+    path.mkdir(parents=True)
+    (path / "package.json").write_text('{"name":"frontend"}\n')
+    (path / "src").mkdir()
+    (path / "src" / "app.js").write_text("export const n = 1;\n")
+    return path
+
+
+def make_requirements_project(path: Path) -> Path:
+    path.mkdir(parents=True)
+    (path / "requirements.txt").write_text("pandas==2.2.0\n")
+    (path / "cli.py").write_text("def main() -> None:\n    print('ok')\n")
+    return path
+
+
 def make_mixed_tree(path: Path) -> Path:
     path.mkdir(parents=True)
-    (path / "paper.pdf").write_bytes(b"%PDF-1.4")
+    (path / "paper.pdf").write_bytes(build_text_pdf(["Introduction to materials"]))
     make_python_project(path / "backend")
     make_dataset(path / "dataset")
+    return path
+
+
+def make_complex_tree(path: Path) -> Path:
+    path.mkdir(parents=True)
+    staging = path / "_staging"
+
+    (path / "README.md").write_text("# Research dump\n")
+    (path / "notes.txt").write_text("todo: plot results\n")
+    (path / "stats.csv").write_text("n,value\n1,3.2\n")
+
+    papers = path / "papers"
+    papers.mkdir()
+    (papers / "survey.pdf").write_bytes(build_text_pdf(["Survey of materials"]))
+    (papers / "methods.md").write_text("# Methods\nWe measured X.\n")
+
+    make_dataset(path / "lab" / "dataset")
+    backend = make_python_project(path / "code" / "backend")
+    junk = backend / "node_modules" / "left-pad"
+    junk.mkdir(parents=True)
+    (junk / "index.js").write_text("module.exports = 1\n")
+    make_requirements_project(path / "tools" / "cli")
+
+    macosx = path / "__MACOSX"
+    macosx.mkdir()
+    (macosx / "._README.md").write_text("resource fork\n")
+    (path / ".DS_Store").write_bytes(b"junk")
+
+    try:
+        frontend = make_node_project(staging / "frontend")
+        zip_named(frontend, path / "packages.zip")
+
+        lib_src = staging / "libsrc"
+        lib_src.mkdir()
+        (lib_src / "shared.py").write_text("VALUE = 1\n")
+        vendor = path / "vendor"
+        vendor.mkdir()
+        zip_contents(lib_src, vendor / "libs.zip")
+
+        deep_src = staging / "deep"
+        deep_src.mkdir()
+        (deep_src / "snippet.py").write_text("def run():\n    return 42\n")
+        deeper = staging / "deeper.zip"
+        zip_contents(deep_src, deeper)
+        inner_src = staging / "inner"
+        inner_src.mkdir()
+        (inner_src / "deeper.zip").write_bytes(deeper.read_bytes())
+        nested = path / "nested"
+        nested.mkdir()
+        zip_contents(inner_src, nested / "inner.zip")
+    finally:
+        if staging.exists():
+            rmtree(staging)
+
     return path
 
 

@@ -184,6 +184,12 @@ class MaterialRow(Base):
     processing_runs: Mapped[list[ProcessingRunRow]] = relationship(
         back_populates="material"
     )
+    classifications: Mapped[list[MaterialClassificationRow]] = relationship(
+        back_populates="material"
+    )
+    artifacts: Mapped[list[MaterialArtifactRow]] = relationship(
+        back_populates="material"
+    )
 
 
 class ProcessingRunRow(Base):
@@ -218,3 +224,73 @@ class ProcessingRunRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     material: Mapped[MaterialRow] = relationship(back_populates="processing_runs")
+
+
+class MaterialClassificationRow(Base):
+    __tablename__ = "material_classifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "material_id",
+            "classifier",
+            "classifier_version",
+            name="uq_material_classifications_identity",
+        ),
+    )
+
+    classification_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("materials.material_id"),
+        nullable=False,
+        index=True,
+    )
+    classifier: Mapped[str] = mapped_column(String(64), nullable=False)
+    classifier_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    material_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    material_subtype: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    evidence: Mapped[list[str]] = mapped_column(JsonDoc, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    material: Mapped[MaterialRow] = relationship(back_populates="classifications")
+
+
+class MaterialArtifactRow(Base):
+    __tablename__ = "material_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "material_id",
+            "artifact_type",
+            "processor",
+            "processor_version",
+            name="uq_material_artifacts_identity",
+        ),
+    )
+
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("materials.material_id"),
+        nullable=False,
+        index=True,
+    )
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    processor: Mapped[str] = mapped_column(String(64), nullable=False)
+    processor_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_uri: Mapped[str] = mapped_column(String(2048), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    material: Mapped[MaterialRow] = relationship(back_populates="artifacts")

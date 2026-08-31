@@ -4,7 +4,9 @@ from material_platform.infrastructure.database.engine import (
 )
 from material_platform.infrastructure.database.models import Base
 from material_platform.infrastructure.database.repositories import (
+    ArtifactRepository,
     BaseRepository,
+    ClassificationRepository,
     DiscoveryNodeRepository,
     DiscoveryRunRepository,
     MaterialRepository,
@@ -13,8 +15,10 @@ from material_platform.infrastructure.database.repositories import (
 )
 
 __all__ = [
+    "ArtifactRepository",
     "Base",
     "BaseRepository",
+    "ClassificationRepository",
     "DiscoveryNodeRepository",
     "DiscoveryRunRepository",
     "MaterialRepository",

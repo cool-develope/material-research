@@ -3,6 +3,8 @@ from material_platform.domain import (
     DiscoveryNode,
     DiscoveryRun,
     Material,
+    MaterialArtifact,
+    MaterialClassification,
     ProcessingRun,
     Source,
 )
@@ -19,6 +21,8 @@ from material_platform.domain.enums import (
 from material_platform.infrastructure.database.models import (
     DiscoveryNodeRow,
     DiscoveryRunRow,
+    MaterialArtifactRow,
+    MaterialClassificationRow,
     MaterialRow,
     ProcessingRunRow,
     SourceRow,
@@ -213,4 +217,66 @@ def processing_run_from_row(row: ProcessingRunRow) -> ProcessingRun:
         started_at=row.started_at,
         finished_at=row.finished_at,
         error=row.error,
+    )
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value)
+
+
+def classification_to_row(
+    classification: MaterialClassification,
+) -> MaterialClassificationRow:
+    return MaterialClassificationRow(
+        classification_id=classification.classification_id,
+        material_id=classification.material_id,
+        classifier=classification.classifier,
+        classifier_version=classification.classifier_version,
+        material_type=classification.material_type.value,
+        material_subtype=classification.subtype,
+        confidence=classification.confidence,
+        evidence=list(classification.evidence),
+        created_at=classification.created_at,
+    )
+
+
+def classification_from_row(row: MaterialClassificationRow) -> MaterialClassification:
+    return MaterialClassification(
+        classification_id=row.classification_id,
+        material_id=row.material_id,
+        material_type=MaterialType(row.material_type),
+        subtype=row.material_subtype,
+        confidence=row.confidence,
+        classifier=row.classifier,
+        classifier_version=row.classifier_version,
+        evidence=_string_tuple(row.evidence),
+        created_at=row.created_at,
+    )
+
+
+def artifact_to_row(artifact: MaterialArtifact) -> MaterialArtifactRow:
+    return MaterialArtifactRow(
+        artifact_id=artifact.artifact_id,
+        material_id=artifact.material_id,
+        artifact_type=artifact.artifact_type,
+        processor=artifact.processor,
+        processor_version=artifact.processor_version,
+        storage_uri=artifact.storage_uri,
+        sha256=artifact.sha256,
+        created_at=artifact.created_at,
+    )
+
+
+def artifact_from_row(row: MaterialArtifactRow) -> MaterialArtifact:
+    return MaterialArtifact(
+        artifact_id=row.artifact_id,
+        material_id=row.material_id,
+        artifact_type=row.artifact_type,
+        processor=row.processor,
+        processor_version=row.processor_version,
+        storage_uri=row.storage_uri,
+        sha256=row.sha256,
+        created_at=row.created_at,
     )

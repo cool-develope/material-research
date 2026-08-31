@@ -16,10 +16,12 @@ class Settings(BaseSettings):
     minio_access_key: str = "minio"
     minio_secret_key: str = "minio123"
     minio_secure: bool = False
+    minio_bucket: str = "material"
 
     workspace_root: Path = Path("/tmp/material-platform")
 
     discovery_version: str = "boundary-v1"
+    pipeline_version: str = "process-v1"
 
     max_archive_depth: int = 5
     max_archive_files: int = 10_000

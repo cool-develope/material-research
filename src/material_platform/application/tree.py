@@ -1,9 +1,11 @@
 from collections import defaultdict
 from uuid import UUID
 
+from material_platform.application.process_material import ProcessResult
 from material_platform.domain.discovery import DiscoveryManifest, DiscoveryNode
 from material_platform.domain.enums import DiscoveryRole
 from material_platform.domain.material import Material
+from material_platform.domain.research_material import ContentLocation
 from material_platform.domain.source import Source
 
 
@@ -30,6 +32,41 @@ def format_ingest_report(
         lines.append(f"{labels[node.node_id]} {kind} candidate")
 
     return "\n".join(lines) + "\n"
+
+
+def format_process_report(
+    manifest: DiscoveryManifest,
+    results: tuple[ProcessResult, ...],
+) -> str:
+    labels = _assign_labels(manifest.nodes)
+    by_path = {item.material.root_path: item for item in results}
+    lines = ["", "RESEARCH"]
+    for node in manifest.nodes:
+        if node.role is not DiscoveryRole.MATERIAL:
+            continue
+        result = by_path.get(node.path)
+        if result is None:
+            continue
+        research = result.research
+        label = labels[node.node_id]
+        count = len(research.content_units)
+        noun = "unit" if count == 1 else "units"
+        lines.append(
+            f"{label} {research.title}  {research.material_type.value}  "
+            f"{count} {noun}  {research.summary}"
+        )
+        for unit in research.content_units:
+            lines.append(f"    {format_location(unit.location)}")
+    return "\n".join(lines) + "\n"
+
+
+def format_location(location: ContentLocation) -> str:
+    path = location.path or ""
+    if location.page is not None:
+        return f"{path} page {location.page}"
+    if location.line_start is not None and location.line_end is not None:
+        return f"{path} lines {location.line_start}-{location.line_end}"
+    return path
 
 
 def _candidate_kind(node: DiscoveryNode, material: Material | None) -> str:

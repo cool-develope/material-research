@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import BinaryIO
 
+from material_platform.infrastructure.object_store.paths import safe_object_key
 from material_platform.infrastructure.object_store.protocol import (
     UnsafeStoragePathError,
 )
@@ -51,12 +52,8 @@ class FilesystemObjectStore:
         return self._resolve(uri).is_file()
 
     def _resolve(self, uri: str) -> Path:
-        if "\x00" in uri:
-            raise UnsafeStoragePathError("NUL in object uri")
-        relative = PurePosixPath(uri.replace("\\", "/"))
-        if relative.is_absolute() or ".." in relative.parts or relative.anchor:
-            raise UnsafeStoragePathError(f"unsafe object uri: {uri}")
-        target = (self._root / relative).resolve()
+        key = safe_object_key(uri)
+        target = (self._root / key).resolve()
         if not target.is_relative_to(self._root):
             raise UnsafeStoragePathError(f"path escaped object store: {uri}")
         return target

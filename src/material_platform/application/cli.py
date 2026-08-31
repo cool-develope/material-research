@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 
 from material_platform.application.ingest_source import IngestSourceService
-from material_platform.application.tree import format_ingest_report
+from material_platform.application.process_material import (
+    ProcessMaterialService,
+    ProcessResult,
+)
+from material_platform.application.tree import (
+    format_ingest_report,
+    format_process_report,
+)
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
 from material_platform.infrastructure.database.engine import (
@@ -28,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Local data directory (sqlite + filesystem store).",
     )
+    parser.add_argument(
+        "--process",
+        action="store_true",
+        help="Classify, extract, and build ResearchMaterial for each Material.",
+    )
     args = parser.parse_args(argv)
     path = args.path.expanduser().resolve()
     if not path.exists():
@@ -46,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     sessions = make_session_factory(engine)
     store = FilesystemObjectStore(data_dir / "store")
     workspace = TemporaryWorkspace(data_dir)
+    processed: tuple[ProcessResult, ...] = ()
 
     with sessions() as session:
         service = IngestSourceService.create(
@@ -57,9 +70,27 @@ def main(argv: list[str] | None = None) -> int:
             archive_limits=ArchiveLimits.from_settings(settings),
         )
         result = service.ingest(path)
+        if args.process:
+            processor = ProcessMaterialService(
+                session,
+                store,
+                pipeline_version=settings.pipeline_version,
+            )
+            items: list[ProcessResult] = []
+            for material in result.materials:
+                try:
+                    items.append(processor.process(material))
+                except Exception as exc:
+                    print(
+                        f"process failed for {material.root_path}: {exc}",
+                        file=sys.stderr,
+                    )
+            processed = tuple(items)
         session.commit()
 
     sys.stdout.write(
         format_ingest_report(result.source, result.manifest, result.materials)
     )
+    if args.process:
+        sys.stdout.write(format_process_report(result.manifest, processed))
     return 0

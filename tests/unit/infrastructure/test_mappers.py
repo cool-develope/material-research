@@ -6,13 +6,17 @@ from material_platform.domain import (
     DiscoveryNode,
     DiscoveryRole,
     Material,
+    MaterialClassification,
     MaterialStatus,
+    MaterialType,
     NodeKind,
     Source,
     SourceStatus,
     SourceType,
 )
 from material_platform.infrastructure.database.mappers import (
+    classification_from_row,
+    classification_to_row,
     discovery_node_from_row,
     discovery_node_to_row,
     material_from_row,
@@ -80,3 +84,20 @@ def test_material_round_trip_includes_discovery_version() -> None:
 
     assert restored.discovery_version == "boundary-v1"
     assert restored == material
+
+
+def test_classification_round_trip() -> None:
+    classification = MaterialClassification(
+        classification_id=uuid4(),
+        material_id=uuid4(),
+        material_type=MaterialType.DOCUMENT,
+        subtype="pdf",
+        confidence=0.95,
+        classifier="deterministic",
+        classifier_version="v1",
+        evidence=("pdf_files:1",),
+        created_at=datetime.now(UTC),
+    )
+
+    restored = classification_from_row(classification_to_row(classification))
+    assert restored == classification

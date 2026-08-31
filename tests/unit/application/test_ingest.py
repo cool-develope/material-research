@@ -14,7 +14,12 @@ from material_platform.infrastructure.object_store import (
     material_content,
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
-from tests.unit.discovery.trees import make_mixed_tree, zip_contents
+from tests.unit.discovery.trees import (
+    COMPLEX_MATERIALS,
+    make_complex_tree,
+    make_mixed_tree,
+    zip_contents,
+)
 
 
 def _ingest(
@@ -82,3 +87,35 @@ def test_reingest_same_zip_does_not_duplicate_materials(
         item.material_id for item in second.materials
     }
     assert len(second.materials) == 3
+
+
+def test_ingest_complex_zip_copies_content_and_skips_junk(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    archive = zip_contents(
+        make_complex_tree(tmp_path / "complex"),
+        tmp_path / "research.zip",
+    )
+    result, store, workspace = _ingest(session, tmp_path, archive)
+
+    paths = sorted(item.root_path for item in result.materials)
+    assert paths == list(COMPLEX_MATERIALS)
+
+    backend = next(
+        item for item in result.materials if item.root_path == "code/backend/"
+    )
+    assert store.exists(material_content(backend.material_id, "src/main.py"))
+    assert not store.exists(
+        material_content(backend.material_id, "node_modules/left-pad/index.js")
+    )
+    frontend = next(item for item in result.materials if item.root_path == "frontend/")
+    assert store.exists(material_content(frontend.material_id, "src/app.js"))
+    scratch = tmp_path / "work" / "scratch"
+    leftover = (
+        [item for item in scratch.rglob("*") if item.is_file()]
+        if scratch.exists()
+        else []
+    )
+    assert leftover == []
+    _ = workspace

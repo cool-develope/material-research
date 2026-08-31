@@ -6,15 +6,20 @@ from pydantic import ValidationError
 
 from material_platform.domain import (
     BoundaryEvidence,
+    ContentLocation,
+    ContentUnit,
     DiscoveryManifest,
     DiscoveryNode,
     DiscoveryRole,
     DiscoveryRun,
     DiscoveryRunStatus,
     Material,
+    MaterialClassification,
+    MaterialProvenance,
     MaterialStatus,
     MaterialType,
     NodeKind,
+    ResearchMaterial,
     Source,
     SourceStatus,
     SourceType,
@@ -167,3 +172,48 @@ def test_material_identity_includes_discovery_version() -> None:
     assert material.material_type is MaterialType.UNKNOWN
     assert material.discovery_version == "boundary-v1"
     assert material.status is MaterialStatus.DISCOVERED
+
+
+def test_research_material_uses_material_type_and_locations() -> None:
+    material_id = uuid4()
+    source_id = uuid4()
+    research = ResearchMaterial(
+        material_id=material_id,
+        material_type=MaterialType.DOCUMENT,
+        material_subtype="pdf",
+        title="paper.pdf",
+        summary="1 page PDF",
+        content_units=(
+            ContentUnit(
+                unit_id="paper.pdf:page:1",
+                type="page",
+                content="Introduction",
+                location=ContentLocation(path="paper.pdf", page=1),
+                digest=SHA256,
+            ),
+        ),
+        provenance=MaterialProvenance(
+            source_id=source_id,
+            root_path="paper.pdf",
+            origin_chain=("research.zip", "paper.pdf"),
+        ),
+    )
+
+    assert research.material_type is MaterialType.DOCUMENT
+    assert research.content_units[0].location.page == 1
+
+    classification = MaterialClassification(
+        classification_id=uuid4(),
+        material_id=material_id,
+        material_type=MaterialType.PROJECT,
+        subtype="python",
+        confidence=0.98,
+        classifier="deterministic",
+        classifier_version="v1",
+        evidence=("root marker:pyproject.toml",),
+        created_at=datetime.now(UTC),
+    )
+    assert classification.subtype == "python"
+
+    with pytest.raises(ValidationError):
+        ContentLocation(page=0)

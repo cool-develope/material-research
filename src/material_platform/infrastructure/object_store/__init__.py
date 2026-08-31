@@ -2,11 +2,15 @@ from material_platform.infrastructure.object_store.digest import sha256_stream
 from material_platform.infrastructure.object_store.filesystem import (
     FilesystemObjectStore,
 )
+from material_platform.infrastructure.object_store.minio import MinioObjectStore
 from material_platform.infrastructure.object_store.paths import (
     discovery_manifest,
+    material_artifact,
     material_content,
     material_content_manifest,
+    material_content_root,
     raw_original,
+    safe_object_key,
 )
 from material_platform.infrastructure.object_store.protocol import (
     ObjectStore,
@@ -15,11 +19,15 @@ from material_platform.infrastructure.object_store.protocol import (
 
 __all__ = [
     "FilesystemObjectStore",
+    "MinioObjectStore",
     "ObjectStore",
     "UnsafeStoragePathError",
     "discovery_manifest",
+    "material_artifact",
     "material_content",
     "material_content_manifest",
+    "material_content_root",
     "raw_original",
+    "safe_object_key",
     "sha256_stream",
 ]

@@ -11,6 +11,8 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "alembic>=1.16,<2",
     "minio>=7,<8",
+    "pypdf>=5,<7",
+    "dagster>=1.13,<1.15",
 ]
 
 [dependency-groups]
@@ -19,6 +21,7 @@ dev = [
     "pytest-cov>=6",
     "ruff>=0.12",
     "mypy>=1.16",
+    "dagster-webserver>=1.13,<1.15",
 ]
 
 [build-system]
@@ -28,6 +31,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/material_platform"]
 
+[tool.dagster]
+module_name = "defs.definitions"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
@@ -35,7 +41,7 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "defs"]
 extend-exclude = ["migrations/script.py.mako"]
 
 [tool.ruff.lint]
@@ -44,4 +50,4 @@ select = ["E", "F", "I", "UP"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["material_platform"]
+packages = ["material_platform", "defs"]
