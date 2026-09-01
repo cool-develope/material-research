@@ -64,7 +64,7 @@ def analyze_units(
     topics = _topics(material, units, headings)
     return MaterialAnalysis(
         material_id=material.material_id,
-        title=_title(material, headings),
+        title=_title(material, headings, units),
         summary=_summary(decision, units),
         purpose=_PURPOSE.get(decision.material_type),
         topics=topics,
@@ -76,7 +76,21 @@ def analyze_units(
     )
 
 
-def _title(material: Material, headings: tuple[str, ...]) -> str:
+def _title(
+    material: Material,
+    headings: tuple[str, ...],
+    units: tuple[ContentUnit, ...],
+) -> str:
+    for unit in units:
+        title = unit.metadata.get("title")
+        if isinstance(title, str) and title.strip():
+            return title.strip()
+        package = unit.metadata.get("package")
+        if isinstance(package, str) and package.strip():
+            version = unit.metadata.get("version")
+            if isinstance(version, str) and version.strip():
+                return f"{package.strip()} {version.strip()}"
+            return package.strip()
     if headings:
         return headings[0]
     return material.name

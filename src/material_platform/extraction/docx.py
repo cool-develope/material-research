@@ -10,7 +10,12 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from material_platform.domain.research_material import ContentUnit
-from material_platform.extraction.common import MaterialFile, line_count, make_unit
+from material_platform.extraction.common import (
+    MaterialFile,
+    line_count,
+    make_unit,
+    merge_unit_metadata,
+)
 
 _HEADINGS = frozenset({"heading 1", "heading 2", "heading1", "heading2"})
 
@@ -21,7 +26,22 @@ def extract_docx(item: MaterialFile) -> tuple[ContentUnit, ...]:
     except Exception:
         return (_empty(item.path),)
     grouped = _group(_blocks(document))
-    return _units(item.path, grouped)
+    return merge_unit_metadata(_units(item.path, grouped), _core_meta(document))
+
+
+def _core_meta(document: Any) -> dict[str, object]:
+    try:
+        props = document.core_properties
+    except Exception:
+        return {}
+    fields: dict[str, object] = {}
+    title = (props.title or "").strip()
+    author = (props.author or "").strip()
+    if title:
+        fields["title"] = title
+    if author:
+        fields["author"] = author
+    return fields
 
 
 def _empty(path: str) -> ContentUnit:

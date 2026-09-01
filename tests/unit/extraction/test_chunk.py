@@ -44,6 +44,17 @@ def test_markdown_splits_on_headings() -> None:
     assert units[0].location.line_start == 1
 
 
+def test_one_line_document_gets_distinct_line_ranges() -> None:
+    text = " ".join(f"tok{index:05d}" for index in range(2_000))
+    item = MaterialFile(path="paper.txt", data=text.encode())
+    units = extract_units(classify_files(("paper.txt",)), (item,))
+    assert len(units) > 1
+    assert units[0].location.line_start == 1
+    assert units[-1].location.line_end is not None
+    assert units[-1].location.line_end > units[0].location.line_end
+    assert f"tok{1999:05d}" in units[-1].content
+
+
 def test_plain_text_windows_long_content() -> None:
     payload = " ".join(f"zz{index:03d}" for index in range(40))
     item = MaterialFile(path="notes.txt", data=payload.encode())

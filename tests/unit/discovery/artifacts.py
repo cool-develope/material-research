@@ -1,4 +1,6 @@
+from io import BytesIO
 from pathlib import Path
+from tarfile import TarFile, TarInfo
 from zipfile import ZipFile
 
 from py7zr import SevenZipFile
@@ -40,6 +42,26 @@ def write_docx(path: Path, text: str = "Notes on materials") -> Path:
 def write_pe(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"MZ" + b"\x00" * 64)
+    return path
+
+
+def write_npm_tarball(
+    path: Path, *, name: str = "left-pad", version: str = "1.3.0"
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (
+        f'{{"name":"{name}","version":"{version}",'
+        f'"description":"pad strings"}}\n'
+    ).encode()
+    index = b"module.exports = function pad() {}\n"
+    with TarFile.open(path, mode="w:gz") as archive:
+        for member, data in (
+            ("package/package.json", payload),
+            ("package/index.js", index),
+        ):
+            info = TarInfo(member)
+            info.size = len(data)
+            archive.addfile(info, BytesIO(data))
     return path
 
 

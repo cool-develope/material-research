@@ -8,6 +8,7 @@ from material_platform.classification.deterministic import (
 )
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.research_material import ContentUnit
+from material_platform.extraction.artifact import extract_artifact
 from material_platform.extraction.budget import DEFAULT_MAX_UNITS
 from material_platform.extraction.chunk import chunk_units
 from material_platform.extraction.common import MaterialFile
@@ -16,7 +17,6 @@ from material_platform.extraction.docx import extract_docx
 from material_platform.extraction.pdf import extract_pdf
 from material_platform.extraction.project import extract_project
 from material_platform.extraction.stub import (
-    extract_artifact,
     extract_stub,
     is_artifact_subtype,
     is_binary_subtype,
@@ -31,7 +31,7 @@ from material_platform.extraction.window import (
 )
 
 EXTRACTOR = "extractors"
-EXTRACTOR_VERSION = "v3"
+EXTRACTOR_VERSION = "v4"
 
 
 def extract_units(

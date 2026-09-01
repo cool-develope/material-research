@@ -19,6 +19,10 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.chunk_tokens == 512
     assert settings.chunk_overlap_tokens == 64
     assert settings.retry_delay_seconds == 2
+    assert settings.qdrant_collection == "research"
+    assert settings.embedder == "fake"
+    assert settings.bge_model == "BAAI/bge-m3"
+    assert settings.bge_reranker == "BAAI/bge-reranker-v2-m3"
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:

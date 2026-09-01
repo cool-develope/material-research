@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 64
     retry_delay_seconds: int = 2
 
+    qdrant_url: str | None = None
+    qdrant_path: Path | None = None
+    qdrant_collection: str = "research"
+    embedder: str = "fake"
+    bge_model: str = "BAAI/bge-m3"
+    bge_reranker: str = "BAAI/bge-reranker-v2-m3"
+
 
 def get_settings() -> Settings:
     return Settings()

@@ -4,6 +4,7 @@ from material_platform.index.tokens import tokenize
 
 DEFAULT_CHUNK_TOKENS = 512
 DEFAULT_CHUNK_OVERLAP = 64
+_WRAP_TOKENS = 16
 
 
 def token_count(text: str) -> int:
@@ -29,13 +30,17 @@ def _pieces(text: str, size: int) -> list[tuple[str, int, int]]:
     lines = text.splitlines()
     if not lines:
         return [(text, 1, 1)]
+    wrap = min(_WRAP_TOKENS, size)
     pieces: list[tuple[str, int, int]] = []
-    for index, line in enumerate(lines, start=1):
+    line_no = 1
+    for line in lines:
         if token_count(line) <= size:
-            pieces.append((line, index, index))
+            pieces.append((line, line_no, line_no))
+            line_no += 1
             continue
-        for part in _split_line(line, size):
-            pieces.append((part, index, index))
+        for part in _split_line(line, wrap):
+            pieces.append((part, line_no, line_no))
+            line_no += 1
     return pieces
 
 

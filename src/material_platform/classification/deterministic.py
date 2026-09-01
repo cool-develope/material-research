@@ -93,6 +93,14 @@ def classify_files(paths: tuple[str, ...]) -> ClassificationDecision:
         )
 
     if len(paths) == 1:
+        name = Path(paths[0]).name.lower()
+        if name.endswith(".tgz"):
+            return ClassificationDecision(
+                MaterialType.CODE,
+                "node_tarball",
+                0.9,
+                ("suffix:node_tarball",),
+            )
         matched = suffix_match(Path(paths[0]).name)
         if matched is not None:
             action, kind = matched

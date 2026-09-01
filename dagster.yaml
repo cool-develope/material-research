@@ -1,3 +1,5 @@
 concurrency:
   pools:
     default_limit: 4
+    document_extraction: 4
+    embedding: 2

@@ -14,11 +14,14 @@ def extract_csv(item: MaterialFile) -> ContentUnit:
     lines = text.splitlines()
     rows = max(len(lines) - 1, 0) if lines else 0
     end = line_count(text)
+    sep = "\t" if item.suffix == ".tsv" else ","
+    header = lines[0] if lines else ""
+    columns = [part.strip() for part in header.split(sep) if part.strip()]
     return make_unit(
         path=item.path,
         content=text,
         unit_type="table",
         line_start=1,
         line_end=end,
-        metadata={"rows": rows},
+        metadata={"rows": rows, "columns": columns[:40]},
     )

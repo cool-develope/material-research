@@ -1,13 +1,12 @@
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.selectable import Select
 
 from material_platform.domain import (
     DiscoveryNode,
     DiscoveryRun,
-    IndexEntry,
     Material,
     MaterialArtifact,
     MaterialClassification,
@@ -24,8 +23,6 @@ from material_platform.infrastructure.database.mappers import (
     discovery_node_to_row,
     discovery_run_from_row,
     discovery_run_to_row,
-    index_entry_from_row,
-    index_entry_to_row,
     material_from_row,
     material_to_row,
     processing_run_from_row,
@@ -36,7 +33,6 @@ from material_platform.infrastructure.database.mappers import (
 from material_platform.infrastructure.database.models import (
     DiscoveryNodeRow,
     DiscoveryRunRow,
-    IndexEntryRow,
     MaterialArtifactRow,
     MaterialClassificationRow,
     MaterialRow,
@@ -331,39 +327,3 @@ class ProcessingRunRepository(BaseRepository):
             return None
         return processing_run_from_row(row)
 
-
-class IndexRepository(BaseRepository):
-    def replace_material(
-        self,
-        material_id: UUID,
-        index_version: str,
-        entries: tuple[IndexEntry, ...],
-    ) -> None:
-        self._session.execute(
-            delete(IndexEntryRow).where(
-                IndexEntryRow.material_id == material_id,
-                IndexEntryRow.index_version == index_version,
-            )
-        )
-        for entry in entries:
-            self._session.add(index_entry_to_row(entry))
-        self._session.flush()
-
-    def list_current(self, index_version: str) -> list[IndexEntry]:
-        rows = self._session.scalars(
-            select(IndexEntryRow).where(IndexEntryRow.index_version == index_version)
-        ).all()
-        return [index_entry_from_row(row) for row in rows]
-
-    def list_for_material(
-        self,
-        material_id: UUID,
-        index_version: str,
-    ) -> list[IndexEntry]:
-        rows = self._session.scalars(
-            select(IndexEntryRow).where(
-                IndexEntryRow.material_id == material_id,
-                IndexEntryRow.index_version == index_version,
-            )
-        ).all()
-        return [index_entry_from_row(row) for row in rows]

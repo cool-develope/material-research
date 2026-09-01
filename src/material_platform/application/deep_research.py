@@ -13,11 +13,18 @@ from material_platform.infrastructure.database.repositories import MaterialRepos
 
 _SNIPPET = 160
 _SOURCE_BOOST = 0.05
+_MAX_SIBLINGS = 4
+_TYPE_ORDER = {
+    "document": 0,
+    "project": 1,
+    "dataset": 2,
+    "code": 3,
+}
 
 
 class DeepResearchService:
-    def __init__(self, session: Session) -> None:
-        self._index = IndexService(session)
+    def __init__(self, session: Session, index: IndexService) -> None:
+        self._index = index
         self._materials = MaterialRepository(session)
 
     def select(self, query: str, *, limit: int = 5) -> tuple[Citation, ...]:
@@ -91,13 +98,26 @@ def _citation(
 def _siblings(repo: MaterialRepository, material: Material | None) -> tuple[str, ...]:
     if material is None:
         return ()
-    names = [
-        item.root_path
+    items = [
+        item
         for item in repo.list_for_source(material.source_id)
         if item.material_id != material.material_id
         and item.status is MaterialStatus.READY
     ]
-    return tuple(sorted(names))
+    items.sort(
+        key=lambda item: (
+            _TYPE_ORDER.get(
+                item.material_type.value if item.material_type else "",
+                9,
+            ),
+            item.root_path,
+        )
+    )
+    names = [item.root_path for item in items]
+    if len(names) <= _MAX_SIBLINGS:
+        return tuple(names)
+    extra = len(names) - _MAX_SIBLINGS
+    return tuple(names[:_MAX_SIBLINGS] + [f"+{extra} more"])
 
 
 def _snippet(content: str) -> str:

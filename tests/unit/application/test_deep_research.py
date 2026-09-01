@@ -7,19 +7,24 @@ from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import INDEX_VERSION
-from material_platform.infrastructure.database.repositories import IndexRepository
+from material_platform.index import IndexService
 from material_platform.infrastructure.object_store import (
     FilesystemObjectStore,
     material_artifact,
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
-from tests.unit.discovery.trees import make_go_project, make_mixed_tree, zip_contents
+from tests.unit.discovery.artifacts import write_wheel
+from tests.unit.discovery.trees import (
+    FIXTURE_ZIP,
+    make_go_project,
+    make_mixed_tree,
+    zip_contents,
+)
 from tests.unit.helpers.pdf import build_text_pdf
 from tests.unit.helpers.text import numbered_words
 
 
-def _ingest_and_process(session: Session, tmp_path: Path) -> None:
+def _ingest_and_process(session: Session, tmp_path: Path, index: IndexService) -> None:
     mixed = make_mixed_tree(tmp_path / "mixed")
     archive = zip_contents(mixed, tmp_path / "research.zip")
     store = FilesystemObjectStore(tmp_path / "store")
@@ -33,7 +38,7 @@ def _ingest_and_process(session: Session, tmp_path: Path) -> None:
         archive_limits=ArchiveLimits(),
     ).ingest(archive)
     session.flush()
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     for material in ingested.materials:
         processor.process(material)
     session.flush()
@@ -42,9 +47,10 @@ def _ingest_and_process(session: Session, tmp_path: Path) -> None:
 def test_deep_research_cites_pdf_page_and_api_lines(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
-    _ingest_and_process(session, tmp_path)
-    research = DeepResearchService(session)
+    _ingest_and_process(session, tmp_path, index)
+    research = DeepResearchService(session, index)
 
     pages = research.select("Introduction to materials")
     assert pages
@@ -54,14 +60,14 @@ def test_deep_research_cites_pdf_page_and_api_lines(
 
     lines = research.select("handle_request")
     assert lines
-    assert any(
-        "src/api.py" in hit.citation and "lines " in hit.citation for hit in lines
-    )
+    assert "src/api.py" in lines[0].citation
+    assert "lines " in lines[0].citation
 
 
 def test_select_cites_late_pdf_page(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     pages = [f"filler page {index}" for index in range(1, 25)]
     pages.append("unique_phrase_page25 appears here")
@@ -78,22 +84,21 @@ def test_select_cites_late_pdf_page(
         archive_limits=ArchiveLimits(),
     ).ingest(pdf)
     session.flush()
-    ProcessMaterialService(session, store).process(ingested.materials[0])
+    ProcessMaterialService(session, store, index=index).process(ingested.materials[0])
     session.flush()
 
-    hits = DeepResearchService(session).select("unique_phrase_page25")
+    hits = DeepResearchService(session, index).select("unique_phrase_page25")
     assert hits
-    assert any(
-        "paper.pdf" in hit.citation and "page 25" in hit.citation for hit in hits
-    )
+    assert "page 25" in hits[0].citation
 
 
 def test_select_lists_same_source_siblings(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
-    _ingest_and_process(session, tmp_path)
-    hits = DeepResearchService(session).select("Introduction to materials")
+    _ingest_and_process(session, tmp_path, index)
+    hits = DeepResearchService(session, index).select("Introduction to materials")
     assert hits
     paper = next(hit for hit in hits if "paper.pdf" in hit.citation)
     assert "backend/" in paper.siblings
@@ -104,6 +109,7 @@ def test_select_lists_same_source_siblings(
 def test_reprocess_replaces_index_entries(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     mixed = make_mixed_tree(tmp_path / "mixed")
     archive = zip_contents(mixed, tmp_path / "research.zip")
@@ -119,11 +125,10 @@ def test_reprocess_replaces_index_entries(
     ).ingest(archive)
     session.flush()
     paper = next(item for item in ingested.materials if item.root_path == "paper.pdf")
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     first = processor.process(paper)
     session.flush()
-    index = IndexRepository(session)
-    count = len(index.list_for_material(paper.material_id, INDEX_VERSION))
+    count = index.count_for_material(paper.material_id)
     assert count >= 1
     assert store.exists(
         material_artifact(paper.material_id, "analysis", ANALYZER_VERSION)
@@ -132,13 +137,13 @@ def test_reprocess_replaces_index_entries(
 
     processor.process(first.material)
     session.flush()
-    again = index.list_for_material(paper.material_id, INDEX_VERSION)
-    assert len(again) == count
+    assert index.count_for_material(paper.material_id) == count
 
 
 def test_deep_research_cites_go_source_lines(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     project = make_go_project(tmp_path / "tools")
     store = FilesystemObjectStore(tmp_path / "store")
@@ -152,19 +157,46 @@ def test_deep_research_cites_go_source_lines(
         archive_limits=ArchiveLimits(),
     ).ingest(project)
     session.flush()
-    ProcessMaterialService(session, store).process(ingested.materials[0])
+    ProcessMaterialService(session, store, index=index).process(ingested.materials[0])
     session.flush()
 
-    hits = DeepResearchService(session).select("HandleRequest")
+    hits = DeepResearchService(session, index).select("HandleRequest")
     assert hits
-    assert any(
-        "main.go" in hit.citation and "lines " in hit.citation for hit in hits
+    assert any("main.go" in hit.citation and "lines " in hit.citation for hit in hits)
+
+
+def test_select_cites_wheel_filename(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    wheel = write_wheel(tmp_path / "requests-2.32.3-py3-none-any.whl")
+    store = FilesystemObjectStore(tmp_path / "store")
+    workspace = TemporaryWorkspace(tmp_path / "work")
+    ingested = IngestSourceService.create(
+        session,
+        store,
+        workspace,
+        discovery_version="boundary-v1",
+        max_archive_depth=5,
+        archive_limits=ArchiveLimits(),
+    ).ingest(wheel)
+    session.flush()
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
     )
+    session.flush()
+    assert index.count_for_material(processed.material.material_id) == 1
+
+    hits = DeepResearchService(session, index).select("requests")
+    assert hits
+    assert hits[0].citation == "requests-2.32.3-py3-none-any.whl"
 
 
 def test_select_finds_tail_of_10k_token_document(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     notes = tmp_path / "paper.txt"
     notes.write_text(numbered_words(12_000, "tok"))
@@ -179,7 +211,9 @@ def test_select_finds_tail_of_10k_token_document(
         archive_limits=ArchiveLimits(),
     ).ingest(notes)
     session.flush()
-    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
+    )
     session.flush()
     assert len(processed.research.content_units) > 20
     assert all(
@@ -187,8 +221,41 @@ def test_select_finds_tail_of_10k_token_document(
         for unit in processed.research.content_units
     )
 
-    hits = DeepResearchService(session).select("tok11999")
+    hits = DeepResearchService(session, index).select("tok11999")
     assert hits
+    top = hits[0]
+    assert "paper.txt" in top.citation
+    assert "lines " in top.citation
+    assert top.location.line_end is not None
+    assert top.location.line_end >= 700
+    assert all("paper.txt" in hit.citation for hit in hits)
+
+
+def test_select_caps_sibling_list(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    store = FilesystemObjectStore(tmp_path / "store")
+    workspace = TemporaryWorkspace(tmp_path / "work")
+    ingested = IngestSourceService.create(
+        session,
+        store,
+        workspace,
+        discovery_version="boundary-v1",
+        max_archive_depth=5,
+        archive_limits=ArchiveLimits(),
+    ).ingest(FIXTURE_ZIP)
+    session.flush()
+    processor = ProcessMaterialService(session, store, index=index)
+    for material in ingested.materials:
+        processor.process(material)
+    session.flush()
+
+    hits = DeepResearchService(session, index).select("Survey of materials")
+    assert hits
+    paper = next(hit for hit in hits if "survey.pdf" in hit.citation)
     assert any(
-        "paper.txt" in hit.citation and "lines " in hit.citation for hit in hits
+        item.startswith("+") and item.endswith("more") for item in paper.siblings
     )
+    assert len(paper.siblings) == 5

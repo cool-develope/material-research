@@ -21,8 +21,9 @@ from material_platform.domain.artifact import MaterialArtifact
 from material_platform.domain.classification import MaterialClassification
 from material_platform.domain.enums import MaterialStatus, ProcessingRunStatus
 from material_platform.domain.material import Material
-from material_platform.domain.research_material import ResearchMaterial
+from material_platform.domain.research_material import ContentUnit, ResearchMaterial
 from material_platform.extraction import EXTRACTOR, EXTRACTOR_VERSION, extract_units
+from material_platform.extraction.common import MaterialFile
 from material_platform.index import IndexService
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
@@ -49,11 +50,20 @@ class ProcessResult:
     analysis: MaterialAnalysis
 
 
+def _skipped_paths(
+    files: tuple[MaterialFile, ...], units: tuple[ContentUnit, ...]
+) -> tuple[str, ...]:
+    kept = {unit.location.path for unit in units}
+    skipped = [item.path for item in files if item.path not in kept]
+    return tuple(skipped[:30])
+
+
 class ProcessMaterialService:
     def __init__(
         self,
         session: Session,
         store: ObjectStore,
+        index: IndexService,
         *,
         pipeline_version: str = "process-v1",
         dagster_run_id: str | None = None,
@@ -74,7 +84,7 @@ class ProcessMaterialService:
         self._classifications = ClassificationRepository(session)
         self._artifacts = ArtifactRepository(session)
         self._runs = ProcessingRunRepository(session)
-        self._index = IndexService(session)
+        self._index = index
         self._queue = WorkQueue(session, pipeline_version=pipeline_version)
 
     def process(self, material: Material) -> ProcessResult:
@@ -181,8 +191,9 @@ class ProcessMaterialService:
         source = self._sources.get(material.source_id)
         if source is None:
             raise LookupError(f"missing source {material.source_id}")
+        skipped = _skipped_paths(files, units)
         research = build_research_material(
-            material, source, decision, units, analysis
+            material, source, decision, units, analysis, skipped=skipped
         )
         self._store_json(
             material.material_id,

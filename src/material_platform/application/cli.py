@@ -15,6 +15,7 @@ from material_platform.application.tree import (
 )
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
+from material_platform.index import make_index_service
 from material_platform.infrastructure.database.engine import (
     make_engine,
     make_session_factory,
@@ -33,7 +34,8 @@ def main(argv: list[str] | None = None) -> int:
         "--data-dir",
         type=Path,
         default=None,
-        help="Local data directory (sqlite + filesystem store).",
+        help="Local data directory (sqlite + filesystem store). "
+        "Use a fresh directory per ingest so sources are not mixed.",
     )
     parser.add_argument(
         "--process",
@@ -43,7 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--postgres",
         action="store_true",
-        help="Use DATABASE_URL and MinIO from the environment instead of local sqlite.",
+        help="Use DATABASE_URL, MinIO, and QDRANT_URL from the environment "
+        "instead of local sqlite.",
     )
     args = parser.parse_args(argv)
     path = args.path.expanduser().resolve()
@@ -59,7 +62,12 @@ def main(argv: list[str] | None = None) -> int:
         store = make_object_store(settings)
     else:
         settings = settings.model_copy(
-            update={"database_url": f"sqlite:///{data_dir / 'material.db'}"}
+            update={
+                "database_url": f"sqlite:///{data_dir / 'material.db'}",
+                "workspace_root": data_dir,
+                "qdrant_url": None,
+                "qdrant_path": data_dir / "qdrant",
+            }
         )
         store = make_object_store(settings, filesystem_root=data_dir / "store")
 
@@ -81,9 +89,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         result = service.ingest(path)
         if args.process:
+            index = make_index_service(settings)
             processor = ProcessMaterialService(
                 session,
                 store,
+                index,
                 pipeline_version=settings.pipeline_version,
                 max_extract_bytes=settings.max_extract_bytes,
                 max_units_per_material=settings.max_units_per_material,

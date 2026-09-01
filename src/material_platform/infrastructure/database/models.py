@@ -190,9 +190,6 @@ class MaterialRow(Base):
     artifacts: Mapped[list[MaterialArtifactRow]] = relationship(
         back_populates="material"
     )
-    index_entries: Mapped[list[IndexEntryRow]] = relationship(
-        back_populates="material"
-    )
 
 
 class ProcessingRunRow(Base):
@@ -297,43 +294,3 @@ class MaterialArtifactRow(Base):
     )
 
     material: Mapped[MaterialRow] = relationship(back_populates="artifacts")
-
-
-class IndexEntryRow(Base):
-    __tablename__ = "index_entries"
-    __table_args__ = (
-        UniqueConstraint(
-            "material_id",
-            "unit_id",
-            "index_version",
-            name="uq_index_entries_identity",
-        ),
-        Index("ix_index_entries_material_id", "material_id"),
-    )
-
-    entry_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        primary_key=True,
-    )
-    material_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("materials.material_id"),
-        nullable=False,
-    )
-    unit_id: Mapped[str] = mapped_column(String(1024), nullable=False)
-    index_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    title: Mapped[str] = mapped_column(String(1024), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    path: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    page: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    line_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    line_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    section: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    tokens: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(
-        JsonDoc,
-        nullable=False,
-        default=list,
-    )
-
-    material: Mapped[MaterialRow] = relationship(back_populates="index_entries")

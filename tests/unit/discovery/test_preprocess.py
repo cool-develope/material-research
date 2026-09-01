@@ -15,7 +15,13 @@ from material_platform.discovery.archive import UnsafeArchiveError
 from material_platform.discovery.archive_tar import SafeTarExpander
 from material_platform.domain.enums import DiscoveryRole, NodeKind
 from material_platform.infrastructure.workspace import TemporaryWorkspace
-from tests.unit.discovery.artifacts import write_docx, write_jar, write_pe, write_wheel
+from tests.unit.discovery.artifacts import (
+    write_docx,
+    write_jar,
+    write_npm_tarball,
+    write_pe,
+    write_wheel,
+)
 from tests.unit.discovery.trees import (
     COMPLEX_MATERIALS,
     make_complex_tree,
@@ -62,6 +68,20 @@ def test_jar_is_one_file_material(tmp_path: Path) -> None:
     assert len(materials) == 1
     assert materials[0].metadata.get("package") == "guava"
     assert not any(".class" in node.path for node in materials)
+
+
+def test_npm_tarball_is_one_file_material(tmp_path: Path) -> None:
+    tarball = write_npm_tarball(tmp_path / "left-pad-1.3.0.tgz")
+    inspected = PathInspector().inspect(tarball)
+    assert inspected.is_file
+    assert not inspected.is_archive
+    assert inspected.material_hint == "node_tarball"
+    assert inspected.peek.get("package") == "left-pad"
+
+    materials = _materials(_discover(tmp_path, tarball))
+    assert len(materials) == 1
+    assert materials[0].path.endswith(".tgz")
+    assert not any(node.path.endswith(".js") for node in materials)
 
 
 def test_docx_is_not_expanded(tmp_path: Path) -> None:

@@ -30,7 +30,10 @@ def test_analyze_pdf_extracts_topics() -> None:
     files = (
         MaterialFile(
             path="paper.pdf",
-            data=build_text_pdf(["Introduction to materials"]),
+            data=build_text_pdf(
+                ["Introduction to materials"],
+                title="Survey of Alloys",
+            ),
         ),
     )
     decision = classify_files(tuple(item.path for item in files))
@@ -38,6 +41,7 @@ def test_analyze_pdf_extracts_topics() -> None:
     analysis = analyze_units(_material("paper.pdf"), decision, units)
     topics = {topic.lower() for topic in analysis.topics}
     assert analysis.analyzer == ANALYZER
+    assert analysis.title == "Survey of Alloys"
     assert "materials" in topics
     assert "introduction" in topics
     assert "Introduction to materials" in analysis.summary

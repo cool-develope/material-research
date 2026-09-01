@@ -22,6 +22,9 @@ COMPLEX_MATERIALS = (
 FIXTURE_ZIP = (
     Path(__file__).resolve().parents[2] / "fixtures" / "mixed_zip" / "research.zip"
 )
+SIMPLE_ZIP = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "simple_mix" / "research.zip"
+)
 
 
 def make_go_project(path: Path) -> Path:

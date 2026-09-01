@@ -29,6 +29,7 @@ def process_material(
         result = ProcessMaterialService(
             session,
             platform.store(),
+            platform.index(),
             pipeline_version=settings.pipeline_version,
             dagster_run_id=context.run_id,
             max_extract_bytes=settings.max_extract_bytes,

@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
 from material_platform.application import ProcessMaterialService
 from material_platform.application.ingest_source import IngestSourceService
+from material_platform.application.tree import format_location
 from material_platform.discovery.archive import ArchiveLimits
 from material_platform.domain.enums import MaterialStatus, MaterialType
+from material_platform.index import IndexService
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
     ClassificationRepository,
@@ -52,13 +54,20 @@ def _ingest(session: Session, tmp_path: Path, source_path: Path):
 def test_process_pdf_produces_page_locations(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     pdf = tmp_path / "paper.pdf"
-    pdf.write_bytes(build_text_pdf(["Introduction to materials"]))
+    pdf.write_bytes(
+        build_text_pdf(
+            ["Introduction to materials"],
+            title="Survey of Alloys",
+            author="Ada Lovelace",
+        )
+    )
     ingested, store = _ingest(session, tmp_path, pdf)
     material = ingested.materials[0]
 
-    processed = ProcessMaterialService(session, store).process(material)
+    processed = ProcessMaterialService(session, store, index=index).process(material)
     session.flush()
 
     assert processed.material.status is MaterialStatus.READY
@@ -67,6 +76,9 @@ def test_process_pdf_produces_page_locations(
     assert processed.research.content_units[0].metadata["strategy"] == "document.pages"
     assert "Introduction" in processed.research.content_units[0].content
     assert processed.research.provenance.root_path == "paper.pdf"
+    assert processed.research.title == "Survey of Alloys"
+    assert processed.research.metadata["author"] == "Ada Lovelace"
+    assert processed.research.metadata["pages"] == 1
     assert processed.analysis.analyzer == ANALYZER
     assert store.exists(
         material_artifact(material.material_id, "research", RESEARCH_VERSION)
@@ -79,16 +91,19 @@ def test_process_pdf_produces_page_locations(
 def test_process_python_project_produces_line_ranges(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     project = make_python_project(tmp_path / "backend")
     ingested, store = _ingest(session, tmp_path, project)
     material = ingested.materials[0]
 
-    processed = ProcessMaterialService(session, store).process(material)
+    processed = ProcessMaterialService(session, store, index=index).process(material)
     session.flush()
 
     assert processed.classification.material_type is MaterialType.PROJECT
     assert processed.classification.subtype == "python"
+    assert processed.research.metadata["language"] == "python"
+    assert processed.research.metadata["package"] == "backend"
     locations = {
         (unit.location.path, unit.location.line_start, unit.location.line_end)
         for unit in processed.research.content_units
@@ -97,6 +112,10 @@ def test_process_python_project_produces_line_ranges(
     assert ("src/api.py", 1, 2) in locations
     assert any(path == "pyproject.toml" for path, _start, _end in locations)
     assert not any(path.startswith("tests/") for path, _start, _end in locations)
+    skipped = processed.research.metadata.get("skipped")
+    assert isinstance(skipped, list)
+    assert "tests/test_main.py" in skipped
+    assert "docs/guide.md" in skipped
     assert all(
         unit.metadata.get("strategy") == "code.file"
         for unit in processed.research.content_units
@@ -110,10 +129,13 @@ def test_process_python_project_produces_line_ranges(
 def test_process_docx_cites_body_lines(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     write_docx(tmp_path / "notes.docx", "Introduction to materials")
     ingested, store = _ingest(session, tmp_path, tmp_path / "notes.docx")
-    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
+    )
     session.flush()
 
     unit = processed.research.content_units[0]
@@ -127,10 +149,13 @@ def test_process_docx_cites_body_lines(
 def test_process_csv_dataset_produces_table_unit(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     dataset = make_dataset(tmp_path / "dataset")
     ingested, store = _ingest(session, tmp_path, dataset)
-    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
+    )
 
     assert processed.research.material_type is MaterialType.DATASET
     unit = processed.research.content_units[0]
@@ -142,11 +167,12 @@ def test_process_csv_dataset_produces_table_unit(
 def test_reprocess_does_not_duplicate_classification(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     pdf = tmp_path / "paper.pdf"
     pdf.write_bytes(build_text_pdf(["Hello"]))
     ingested, store = _ingest(session, tmp_path, pdf)
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     first = processor.process(ingested.materials[0])
     session.flush()
     second = processor.process(first.material)
@@ -169,11 +195,12 @@ def test_reprocess_does_not_duplicate_classification(
 def test_failed_material_retries_alone_siblings_stay_ready(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     mixed = make_mixed_tree(tmp_path / "mixed")
     archive = zip_contents(mixed, tmp_path / "research.zip")
     ingested, store = _ingest(session, tmp_path, archive)
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     by_path = {item.root_path: item for item in ingested.materials}
 
     backend = processor.process(by_path["backend/"])
@@ -219,6 +246,7 @@ def test_failed_material_retries_alone_siblings_stay_ready(
 def test_process_mixed_archive_with_artifacts_all_ready(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     mixed = make_mixed_tree(tmp_path / "mixed")
     write_pe(mixed / "AndroidStudio-setup.exe")
@@ -238,20 +266,34 @@ def test_process_mixed_archive_with_artifacts_all_ready(
     assert not any(".class" in item.root_path for item in ingested.materials)
     assert not any("document.xml" in item.root_path for item in ingested.materials)
 
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     for material in ingested.materials:
         processed = processor.process(material)
         session.flush()
         assert processed.material.status is MaterialStatus.READY
+        if material.root_path.endswith(".whl"):
+            assert len(processed.research.content_units) == 1
+            unit = processed.research.content_units[0]
+            assert unit.type == "artifact"
+            assert unit.location.line_start is None
+            assert format_location(unit.location) == material.root_path
+            assert processed.research.metadata["package"] == "requests"
+        if material.root_path.endswith(".jar"):
+            assert len(processed.research.content_units) == 1
+            assert processed.research.content_units[0].type == "artifact"
+            assert processed.research.metadata["package"] == "guava"
 
 
 def test_process_go_project_cites_source_lines(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     project = make_go_project(tmp_path / "tools")
     ingested, store = _ingest(session, tmp_path, project)
-    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
+    )
     session.flush()
 
     assert processed.classification.material_type is MaterialType.PROJECT
@@ -268,6 +310,7 @@ def test_process_go_project_cites_source_lines(
 def test_process_nested_dataset_and_installer_siblings_ready(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     root = make_nested_lab_data(tmp_path / "dump")
     (root / "paper.pdf").write_bytes(build_text_pdf(["Introduction"]))
@@ -278,7 +321,7 @@ def test_process_nested_dataset_and_installer_siblings_ready(
     assert "paper.pdf" in by_path
     assert "AndroidStudio-setup.exe" in by_path
 
-    processor = ProcessMaterialService(session, store)
+    processor = ProcessMaterialService(session, store, index=index)
     types: dict[str, MaterialType] = {}
     for material in ingested.materials:
         processed = processor.process(material)
@@ -292,12 +335,13 @@ def test_process_nested_dataset_and_installer_siblings_ready(
 def test_process_caps_extracted_bytes(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     notes = tmp_path / "notes.txt"
     notes.write_text("abcdefghijklmnopqrstuvwxyz\n")
     ingested, store = _ingest(session, tmp_path, notes)
     processed = ProcessMaterialService(
-        session, store, max_extract_bytes=8
+        session, store, index=index, max_extract_bytes=8
     ).process(ingested.materials[0])
     session.flush()
     assert processed.material.status is MaterialStatus.READY

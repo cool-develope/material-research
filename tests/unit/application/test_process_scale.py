@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.discovery.archive import ArchiveLimits
+from material_platform.index import IndexService
 from material_platform.infrastructure.object_store import FilesystemObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.helpers.text import numbered_words
@@ -28,6 +29,7 @@ def _ingest(session: Session, tmp_path: Path, source: Path):
 def test_process_wide_project_caps_files_skips_tests(
     session: Session,
     tmp_path: Path,
+    index: IndexService,
 ) -> None:
     root = tmp_path / "backend"
     src = root / "src"
@@ -38,17 +40,19 @@ def test_process_wide_project_caps_files_skips_tests(
     (src / "main.py").write_text(numbered_words(3_000, "main"))
     (src / "api.py").write_text("def handle_request():\n    return 1\n")
     (src / "util.py").write_text("def helper():\n    return 0\n")
-    for index in range(40):
-        (src / f"api_{index:02d}.py").write_text(
-            f"def handle_request_{index:02d}():\n    return {index}\n"
+    for number in range(40):
+        (src / f"api_{number:02d}.py").write_text(
+            f"def handle_request_{number:02d}():\n    return {number}\n"
         )
-    for index in range(25):
-        (tests / f"test_{index:02d}.py").write_text(
-            f"def test_{index:02d}() -> None:\n    assert True\n"
+    for number in range(25):
+        (tests / f"test_{number:02d}.py").write_text(
+            f"def test_{number:02d}() -> None:\n    assert True\n"
         )
 
     ingested, store = _ingest(session, tmp_path, root)
-    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    processed = ProcessMaterialService(session, store, index=index).process(
+        ingested.materials[0]
+    )
     session.flush()
     units = processed.research.content_units
     paths = {unit.location.path for unit in units}

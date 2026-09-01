@@ -8,7 +8,8 @@ from material_platform.classification.deterministic import (
 )
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.budget import DEFAULT_MAX_UNITS
-from material_platform.extraction.common import MaterialFile
+from material_platform.extraction.common import MaterialFile, merge_unit_metadata
+from material_platform.extraction.manifest import project_identity
 from material_platform.extraction.text import extract_text
 
 _SKIP_NAMES = frozenset(
@@ -20,7 +21,9 @@ _SKIP_NAMES = frozenset(
         "pnpm-lock.yaml",
     }
 )
-_SKIP_DIRS = frozenset({"tests", "test", "__pycache__"})
+_SKIP_DIRS = frozenset(
+    {"tests", "test", "__pycache__", "node_modules", "dist", "build", ".git"}
+)
 _PROJECT_NAMES = frozenset({"go.mod", "Pipfile"})
 _PROJECT_SUFFIXES = CODE_SUFFIXES | TEXT_SUFFIXES | frozenset(
     {".toml", ".json", ".xml", ".gradle", ".mod"}
@@ -65,10 +68,11 @@ def extract_project(
         key=lambda pair: (pair[0], pair[1].path.lower()),
     )
     chosen = ranked[:max_units]
-    return tuple(
+    units = tuple(
         extract_text(item).model_copy(update={"type": "file"})
         for _rank, item in chosen
     )
+    return merge_unit_metadata(units, project_identity(files))
 
 
 def _rank(item: MaterialFile) -> int | None:

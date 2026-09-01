@@ -13,25 +13,50 @@ uv run pytest
 
 Copy `.env.example` to `.env` when you start using Postgres and MinIO.
 
+BGE weights (embed + reranker) are not in git. Download them into the Hugging Face cache:
+
+```bash
+uv pip install huggingface_hub
+uv run python scripts/download_bge.py
+```
+
+That caches `BAAI/bge-m3` and `BAAI/bge-reranker-v2-m3`. Search still uses Qdrant hybrid RRF; the reranker is on disk for later.
+
+Install CPU inference (torch is not in the default lockfile):
+
+```bash
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install FlagEmbedding
+```
+
+Then ingest with BGE-M3 instead of the hashed fake embedder:
+
+```bash
+EMBEDDER=bge-m3 uv run python scripts/ingest_local.py \
+  tests/fixtures/simple_mix/research.zip \
+  --data-dir /tmp/mp-bge --process
+EMBEDDER=bge-m3 uv run python scripts/research_query.py "handle_request" \
+  --data-dir /tmp/mp-bge
+```
+
 ## Local ingest (no Dagster)
 
 SQLite + filesystem store, no Docker:
 
 ```bash
-uv run python scripts/ingest_local.py tests/fixtures/mixed_zip/research.zip \
-  --data-dir /tmp/material-platform --process
-```
-
-Omit `--process` to discover materials only (`DISCOVERED`). With `--process`, each material is classified, extracted, analyzed, indexed, and written as a `ResearchMaterial` (`READY`).
-
-Query the index:
-
-```bash
+uv run python scripts/ingest_local.py tests/fixtures/simple_mix/research.zip \
+  --data-dir /tmp/mp-simple --process
 uv run python scripts/research_query.py "Introduction to materials" \
-  --data-dir /tmp/material-platform
+  --data-dir /tmp/mp-simple
+uv run python scripts/research_query.py "handle_request" \
+  --data-dir /tmp/mp-simple
 ```
 
-Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`.
+That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
+
+Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`. `tests/` is not indexed.
+
+A larger dump lives at `tests/fixtures/mixed_zip/research.zip`.
 
 ## Dagster pipeline
 
@@ -104,14 +129,14 @@ ops:
 
 Successful process runs mark the material `READY`. Failures mark it `FAILED`; a later run can claim and retry that material alone. Siblings are not re-queued.
 
-### Optional: Postgres and MinIO
+### Optional: Postgres, MinIO, and Qdrant
 
 ```bash
 docker compose up -d
 uv run alembic upgrade head
 ```
 
-In the Launchpad, point the resource at env-configured Postgres and MinIO:
+In the Launchpad, point the resource at env-configured Postgres, MinIO, and Qdrant:
 
 ```yaml
 resources:
@@ -121,7 +146,7 @@ resources:
       data_dir: /tmp/material-platform
 ```
 
-`DATABASE_URL` and MinIO settings come from `.env` (see `.env.example`). Scratch/workspace stay under `data_dir`; object bytes go to the MinIO bucket.
+`DATABASE_URL`, MinIO, and `QDRANT_URL` come from `.env` (see `.env.example`). Scratch/workspace stay under `data_dir`; object bytes go to the MinIO bucket; retrieval lives in Qdrant. Default `EMBEDDER=fake` is hashed dense+sparse for tests and local smoke. Set `EMBEDDER=bge-m3` after installing FlagEmbedding for production hybrid search.
 
 CLI against the same stack:
 
@@ -139,7 +164,7 @@ src/material_platform/
   discovery/          boundary detectors, ZIP expansion
   application/        ingest, process, claim queue, Deep Research select
   analysis/           deterministic MaterialAnalysis
-  index/              lexical + hashed-vector index
+  index/              Qdrant hybrid search (BGE-M3 or fake embedder)
   research/           ResearchMaterial builder
 migrations/           Alembic (identities and state)
 tests/fixtures/       mixed ZIP used in tests and the example ingest

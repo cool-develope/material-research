@@ -17,5 +17,5 @@ class IndexEntry(Contract):
     line_start: int | None = Field(default=None, ge=1)
     line_end: int | None = Field(default=None, ge=1)
     section: str | None = None
-    tokens: str
+    tokens: str = ""
     embedding: tuple[float, ...] = ()

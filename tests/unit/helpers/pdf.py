@@ -2,7 +2,12 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def build_text_pdf(pages: list[str]) -> bytes:
+def build_text_pdf(
+    pages: list[str],
+    *,
+    title: str | None = None,
+    author: str | None = None,
+) -> bytes:
     if not pages:
         pages = [""]
     kids = " ".join(f"{4 + 2 * index} 0 R" for index in range(len(pages)))
@@ -23,6 +28,15 @@ def build_text_pdf(pages: list[str]) -> bytes:
             f"<< /Length {len(stream.encode('latin-1'))} >>\n"
             f"stream\n{stream}\nendstream"
         )
+    info_id: int | None = None
+    if title or author:
+        parts: list[str] = []
+        if title:
+            parts.append(f"/Title ({_escape(title)})")
+        if author:
+            parts.append(f"/Author ({_escape(author)})")
+        objects.append("<< " + " ".join(parts) + " >>")
+        info_id = len(objects)
 
     header = b"%PDF-1.4\n"
     body = b""
@@ -37,8 +51,9 @@ def build_text_pdf(pages: list[str]) -> bytes:
     xref_lines = ["xref", f"0 {len(objects) + 1}", "0000000000 65535 f "]
     xref_lines.extend(f"{offset:010d} 00000 n " for offset in offsets[1:])
     xref = ("\n".join(xref_lines) + "\n").encode("latin-1")
+    info = f" /Info {info_id} 0 R" if info_id is not None else ""
     trailer = (
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R{info} >>\n"
         f"startxref\n{position}\n%%EOF\n"
     ).encode("latin-1")
     return header + body + xref + trailer

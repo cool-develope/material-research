@@ -69,6 +69,12 @@ def test_classifies_go_project_from_root_marker() -> None:
     assert decision.subtype == "go"
 
 
+def test_classifies_npm_tarball_as_code() -> None:
+    decision = classify_files(("left-pad-1.3.0.tgz",))
+    assert decision.material_type is MaterialType.CODE
+    assert decision.subtype == "node_tarball"
+
+
 def test_classifies_notebook_as_code() -> None:
     decision = classify_files(("notes.ipynb",))
     assert decision.material_type is MaterialType.CODE

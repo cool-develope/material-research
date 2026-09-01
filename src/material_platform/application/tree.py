@@ -5,8 +5,11 @@ from material_platform.application.process_material import ProcessResult
 from material_platform.domain.discovery import DiscoveryManifest, DiscoveryNode
 from material_platform.domain.enums import DiscoveryRole
 from material_platform.domain.material import Material
-from material_platform.domain.research_material import ContentLocation
+from material_platform.domain.research_material import ContentLocation, ContentUnit
 from material_platform.domain.source import Source
+
+_LOCATION_LIST = 4
+_SKIP_LIST = 5
 
 
 def format_ingest_report(
@@ -55,8 +58,10 @@ def format_process_report(
             f"{label} {research.title}  {research.material_type.value}  "
             f"{count} {noun}  {research.summary}"
         )
-        for unit in research.content_units:
-            lines.append(f"    {format_location(unit.location)}")
+        lines.extend(_location_lines(research.content_units))
+        skipped = _skipped_line(research.metadata.get("skipped"))
+        if skipped is not None:
+            lines.append(skipped)
     return "\n".join(lines) + "\n"
 
 
@@ -67,6 +72,28 @@ def format_location(location: ContentLocation) -> str:
     if location.line_start is not None and location.line_end is not None:
         return f"{path} lines {location.line_start}-{location.line_end}"
     return path
+
+
+def _location_lines(units: tuple[ContentUnit, ...]) -> list[str]:
+    if not units:
+        return []
+    if len(units) <= _LOCATION_LIST:
+        return [f"    {format_location(unit.location)}" for unit in units]
+    first = format_location(units[0].location)
+    last = format_location(units[-1].location)
+    return [f"    {first} … {last}"]
+
+
+def _skipped_line(value: object) -> str | None:
+    if not isinstance(value, list) or not value:
+        return None
+    paths = [str(item) for item in value]
+    shown = paths[:_SKIP_LIST]
+    extra = len(paths) - len(shown)
+    text = ", ".join(shown)
+    if extra > 0:
+        text = f"{text} +{extra} more"
+    return f"    skipped: {text}"
 
 
 def _candidate_kind(node: DiscoveryNode, material: Material | None) -> str:

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
+from material_platform.index import IndexService, make_index_service
 from material_platform.infrastructure.database.engine import (
     make_engine,
     make_session_factory,
@@ -26,6 +27,7 @@ class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
     use_sqlite: bool = True
     _engine: Engine | None = PrivateAttr(default=None)
     _sessions: sessionmaker[Session] | None = PrivateAttr(default=None)
+    _index: IndexService | None = PrivateAttr(default=None)
 
     def settings(self) -> Settings:
         data = Path(self.data_dir)
@@ -36,6 +38,8 @@ class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
                 update={
                     "database_url": f"sqlite:///{data / 'material.db'}",
                     "workspace_root": data,
+                    "qdrant_url": None,
+                    "qdrant_path": data / "qdrant",
                 }
             )
         return settings.model_copy(update={"workspace_root": data})
@@ -60,6 +64,11 @@ class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
                 filesystem_root=Path(self.data_dir) / "store",
             )
         return make_object_store(self.settings())
+
+    def index(self) -> IndexService:
+        if self._index is None:
+            self._index = make_index_service(self.settings())
+        return self._index
 
     def workspace(self) -> TemporaryWorkspace:
         return TemporaryWorkspace(Path(self.data_dir))

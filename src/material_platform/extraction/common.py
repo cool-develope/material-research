@@ -34,6 +34,17 @@ def line_count(text: str) -> int:
     return max(len(text.splitlines()), 1)
 
 
+def merge_unit_metadata(
+    units: tuple[ContentUnit, ...], extra: dict[str, object]
+) -> tuple[ContentUnit, ...]:
+    if not extra:
+        return units
+    return tuple(
+        unit.model_copy(update={"metadata": {**unit.metadata, **extra}})
+        for unit in units
+    )
+
+
 def make_unit(
     *,
     path: str,
