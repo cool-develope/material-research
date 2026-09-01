@@ -1,0 +1,32 @@
+{
+  "id": "simple_mix",
+  "cases": [
+    {
+      "id": "paper-intro",
+      "query": "Introduction to materials",
+      "expect": [{"path": "paper.pdf", "page": 1}]
+    },
+    {
+      "id": "api-handler",
+      "query": "handle_request",
+      "expect": [{"path": "src/api.py", "lines": true}]
+    },
+    {
+      "id": "main-print",
+      "query": "print",
+      "expect": [{"path": "src/main.py", "lines": true}]
+    },
+    {
+      "id": "paper-opening-paraphrase",
+      "query": "what does the opening of this paper cover",
+      "mode": "semantic",
+      "expect": [{"path": "paper.pdf", "page": 1}]
+    },
+    {
+      "id": "api-handler-paraphrase",
+      "query": "where is the request handler defined",
+      "mode": "semantic",
+      "expect": [{"path": "src/api.py", "lines": true}]
+    }
+  ]
+}

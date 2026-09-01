@@ -1,0 +1,43 @@
+{
+  "id": "eval_hard",
+  "cases": [
+    {
+      "id": "battery-separator",
+      "query": "separator swelling",
+      "expect": [{"path": "batteries.pdf", "page": 2}]
+    },
+    {
+      "id": "api-handler",
+      "query": "handle_request",
+      "expect": [{"path": "src/api.py", "lines": true, "section": "handle_request"}]
+    },
+    {
+      "id": "api-retry",
+      "query": "retry_failed_request",
+      "expect": [{"path": "src/api.py", "lines": true, "section": "retry_failed_request"}]
+    },
+    {
+      "id": "lab-hotplate",
+      "query": "hot plate",
+      "expect": [{"path": "lab_notes.md", "lines": true}]
+    },
+    {
+      "id": "battery-runaway-paraphrase",
+      "query": "what causes thermal runaway during fast charging",
+      "mode": "semantic",
+      "expect": [{"path": "batteries.pdf", "page": 2}]
+    },
+    {
+      "id": "api-retry-paraphrase",
+      "query": "how do we recover after a failed HTTP call",
+      "mode": "semantic",
+      "expect": [{"path": "src/api.py", "lines": true, "section": "retry_failed_request"}]
+    },
+    {
+      "id": "lab-hotplate-paraphrase",
+      "query": "notes from the laboratory hot-plate experiment",
+      "mode": "semantic",
+      "expect": [{"path": "lab_notes.md", "lines": true}]
+    }
+  ]
+}
