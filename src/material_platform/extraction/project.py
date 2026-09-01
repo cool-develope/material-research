@@ -19,7 +19,10 @@ _SKIP_NAMES = frozenset(
         "pnpm-lock.yaml",
     }
 )
-_PROJECT_SUFFIXES = CODE_SUFFIXES | TEXT_SUFFIXES | frozenset({".toml", ".json"})
+_PROJECT_NAMES = frozenset({"go.mod", "Pipfile"})
+_PROJECT_SUFFIXES = CODE_SUFFIXES | TEXT_SUFFIXES | frozenset(
+    {".toml", ".json", ".xml", ".gradle", ".mod"}
+)
 
 
 def extract_project(files: tuple[MaterialFile, ...]) -> tuple[ContentUnit, ...]:
@@ -28,7 +31,8 @@ def extract_project(files: tuple[MaterialFile, ...]) -> tuple[ContentUnit, ...]:
         name = Path(item.path).name
         if name in _SKIP_NAMES:
             continue
-        if Path(item.path).suffix.lower() not in _PROJECT_SUFFIXES:
+        suffix = Path(item.path).suffix.lower()
+        if name not in _PROJECT_NAMES and suffix not in _PROJECT_SUFFIXES:
             continue
         unit = extract_text(item)
         units.append(

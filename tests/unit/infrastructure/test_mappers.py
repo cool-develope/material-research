@@ -5,6 +5,7 @@ from material_platform.domain import (
     BoundaryEvidence,
     DiscoveryNode,
     DiscoveryRole,
+    IndexEntry,
     Material,
     MaterialClassification,
     MaterialStatus,
@@ -19,6 +20,8 @@ from material_platform.infrastructure.database.mappers import (
     classification_to_row,
     discovery_node_from_row,
     discovery_node_to_row,
+    index_entry_from_row,
+    index_entry_to_row,
     material_from_row,
     material_to_row,
     source_from_row,
@@ -101,3 +104,20 @@ def test_classification_round_trip() -> None:
 
     restored = classification_from_row(classification_to_row(classification))
     assert restored == classification
+
+
+def test_index_entry_round_trip() -> None:
+    entry = IndexEntry(
+        entry_id=uuid4(),
+        material_id=uuid4(),
+        unit_id="paper.pdf:page:1",
+        index_version="v1",
+        title="paper.pdf",
+        content="Introduction to materials",
+        path="paper.pdf",
+        page=1,
+        tokens="introduction materials",
+        embedding=(0.6, 0.8),
+    )
+    restored = index_entry_from_row(index_entry_to_row(entry))
+    assert restored == entry

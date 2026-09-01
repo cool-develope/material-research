@@ -1,3 +1,4 @@
+import tarfile
 from pathlib import Path
 from shutil import rmtree
 from zipfile import ZipFile
@@ -23,11 +24,24 @@ FIXTURE_ZIP = (
 )
 
 
+def make_go_project(path: Path) -> Path:
+    path.mkdir(parents=True)
+    (path / "go.mod").write_text("module example.com/tools\n\ngo 1.22\n")
+    (path / "main.go").write_text(
+        "package main\n\nfunc HandleRequest(path string) string {\n"
+        "\treturn \"ok\"\n}\n"
+    )
+    return path
+
+
 def make_python_project(path: Path) -> Path:
     path.mkdir(parents=True)
     (path / "pyproject.toml").write_text("[project]\nname = 'backend'\n")
     (path / "src").mkdir()
     (path / "src" / "main.py").write_text("print('ok')\n")
+    (path / "src" / "api.py").write_text(
+        "def handle_request(path: str) -> str:\n    return 'ok'\n"
+    )
     (path / "tests").mkdir()
     (path / "tests" / "test_main.py").write_text(
         "def test_ok() -> None:\n    assert True\n"
@@ -40,6 +54,17 @@ def make_python_project(path: Path) -> Path:
 def make_dataset(path: Path) -> Path:
     path.mkdir(parents=True)
     (path / "rows.csv").write_text("a,b\n1,2\n")
+    return path
+
+
+def make_nested_lab_data(path: Path) -> Path:
+    path.mkdir(parents=True)
+    data = path / "lab" / "data"
+    data.mkdir(parents=True)
+    (data / "2023").mkdir()
+    (data / "2024").mkdir()
+    (data / "2023" / "results.csv").write_text("n,value\n1,2\n")
+    (data / "2024" / "results.csv").write_text("n,value\n3,4\n")
     return path
 
 
@@ -135,3 +160,11 @@ def zip_named(folder: Path, zip_path: Path) -> Path:
                 arc = f"{folder.name}/{file.relative_to(folder).as_posix()}"
                 zip_file.write(file, arc)
     return zip_path
+
+
+def tar_gz_contents(folder: Path, tar_path: Path) -> Path:
+    with tarfile.open(tar_path, "w:gz") as archive:
+        for file in folder.rglob("*"):
+            if file.is_file():
+                archive.add(file, arcname=file.relative_to(folder).as_posix())
+    return tar_path

@@ -7,9 +7,11 @@ from pathlib import Path
 from uuid import UUID
 
 from material_platform.discovery.skips import is_skipped_name
+from material_platform.domain.discovery import DiscoveryManifest
 from material_platform.extraction.common import MaterialFile
 from material_platform.infrastructure.object_store.digest import sha256_stream
 from material_platform.infrastructure.object_store.paths import (
+    discovery_manifest,
     material_content,
     material_content_manifest,
 )
@@ -79,12 +81,27 @@ def copy_material_content(
     return digest
 
 
+def write_discovery_manifest(store: ObjectStore, manifest: DiscoveryManifest) -> str:
+    body = manifest.model_dump_json().encode()
+    uri = discovery_manifest(manifest.source_id, manifest.discovery_run_id)
+    store.put(
+        uri=uri,
+        data=BytesIO(body),
+        size=len(body),
+        content_type="application/json",
+    )
+    return uri
+
+
 def load_material_files(
-    store: ObjectStore, material_id: UUID
+    store: ObjectStore,
+    material_id: UUID,
+    *,
+    max_bytes: int | None = None,
 ) -> tuple[MaterialFile, ...]:
     with store.open(material_content_manifest(material_id)) as handle:
-        manifest = json.load(handle)
-    files = manifest.get("files", [])
+        payload = json.load(handle)
+    files = payload.get("files", [])
     if not isinstance(files, list):
         return ()
     loaded: list[MaterialFile] = []
@@ -93,5 +110,6 @@ def load_material_files(
             continue
         path = str(entry["path"])
         with store.open(material_content(material_id, path)) as handle:
-            loaded.append(MaterialFile(path=path, data=handle.read()))
+            data = handle.read() if max_bytes is None else handle.read(max_bytes)
+        loaded.append(MaterialFile(path=path, data=data))
     return tuple(loaded)

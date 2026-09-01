@@ -1,5 +1,7 @@
+from material_platform.domain.analysis import AnalyzedEntity, MaterialAnalysis
 from material_platform.domain.artifact import MaterialArtifact
 from material_platform.domain.base import Contract
+from material_platform.domain.citation import Citation
 from material_platform.domain.classification import MaterialClassification
 from material_platform.domain.discovery import (
     BoundaryEvidence,
@@ -17,6 +19,7 @@ from material_platform.domain.enums import (
     SourceStatus,
     SourceType,
 )
+from material_platform.domain.index_entry import IndexEntry
 from material_platform.domain.material import Material
 from material_platform.domain.processing import ProcessingRun
 from material_platform.domain.research_material import (
@@ -28,7 +31,9 @@ from material_platform.domain.research_material import (
 from material_platform.domain.source import Source
 
 __all__ = [
+    "AnalyzedEntity",
     "BoundaryEvidence",
+    "Citation",
     "ContentLocation",
     "ContentUnit",
     "Contract",
@@ -37,7 +42,9 @@ __all__ = [
     "DiscoveryRole",
     "DiscoveryRun",
     "DiscoveryRunStatus",
+    "IndexEntry",
     "Material",
+    "MaterialAnalysis",
     "MaterialArtifact",
     "MaterialClassification",
     "MaterialProvenance",

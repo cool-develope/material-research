@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
+from material_platform.analysis import ANALYZER, ANALYZER_VERSION, analyze_units
 from material_platform.application.content import load_material_files
 from material_platform.application.queue import WorkQueue
 from material_platform.classification import (
@@ -15,12 +16,14 @@ from material_platform.classification import (
     CLASSIFIER_VERSION,
     classify_files,
 )
+from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.artifact import MaterialArtifact
 from material_platform.domain.classification import MaterialClassification
 from material_platform.domain.enums import MaterialStatus, ProcessingRunStatus
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ResearchMaterial
 from material_platform.extraction import EXTRACTOR, EXTRACTOR_VERSION, extract_units
+from material_platform.index import IndexService
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
     ClassificationRepository,
@@ -43,6 +46,7 @@ class ProcessResult:
     material: Material
     classification: MaterialClassification
     research: ResearchMaterial
+    analysis: MaterialAnalysis
 
 
 class ProcessMaterialService:
@@ -53,16 +57,18 @@ class ProcessMaterialService:
         *,
         pipeline_version: str = "process-v1",
         dagster_run_id: str | None = None,
+        max_extract_bytes: int = 8 * 1024 * 1024,
     ) -> None:
         self._session = session
         self._store = store
-        self._pipeline_version = pipeline_version
         self._dagster_run_id = dagster_run_id
+        self._max_extract_bytes = max_extract_bytes
         self._sources = SourceRepository(session)
         self._materials = MaterialRepository(session)
         self._classifications = ClassificationRepository(session)
         self._artifacts = ArtifactRepository(session)
         self._runs = ProcessingRunRepository(session)
+        self._index = IndexService(session)
         self._queue = WorkQueue(session, pipeline_version=pipeline_version)
 
     def process(self, material: Material) -> ProcessResult:
@@ -110,7 +116,11 @@ class ProcessMaterialService:
             raise
 
     def _process(self, material: Material) -> ProcessResult:
-        files = load_material_files(self._store, material.material_id)
+        files = load_material_files(
+            self._store,
+            material.material_id,
+            max_bytes=self._max_extract_bytes,
+        )
         decision = classify_files(tuple(item.path for item in files))
         classification = self._classifications.upsert(
             MaterialClassification(
@@ -144,11 +154,24 @@ class ProcessMaterialService:
             processor_version=EXTRACTOR_VERSION,
             payload={"units": [unit.model_dump(mode="json") for unit in units]},
         )
+        material = self._set_status(material, MaterialStatus.EXTRACTED)
+
+        analysis = analyze_units(material, decision, units)
+        self._store_json(
+            material.material_id,
+            artifact_type="analysis",
+            processor=ANALYZER,
+            processor_version=ANALYZER_VERSION,
+            payload=analysis.model_dump(mode="json"),
+        )
+        material = self._set_status(material, MaterialStatus.ANALYZED)
 
         source = self._sources.get(material.source_id)
         if source is None:
             raise LookupError(f"missing source {material.source_id}")
-        research = build_research_material(material, source, decision, units)
+        research = build_research_material(
+            material, source, decision, units, analysis
+        )
         self._store_json(
             material.material_id,
             artifact_type="research",
@@ -157,14 +180,21 @@ class ProcessMaterialService:
             payload=research.model_dump(mode="json"),
         )
 
-        material = material.model_copy(update={"status": MaterialStatus.READY})
-        self._materials.save(material)
-        self._session.flush()
+        self._index.replace(research)
+        material = self._set_status(material, MaterialStatus.INDEXED)
+        material = self._set_status(material, MaterialStatus.READY)
         return ProcessResult(
             material=material,
             classification=classification,
             research=research,
+            analysis=analysis,
         )
+
+    def _set_status(self, material: Material, status: MaterialStatus) -> Material:
+        material = material.model_copy(update={"status": status})
+        self._materials.save(material)
+        self._session.flush()
+        return material
 
     def _store_json(
         self,

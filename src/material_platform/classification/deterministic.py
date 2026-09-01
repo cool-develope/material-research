@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from material_platform.discovery.detectors.project import PROJECT_MARKERS
+from material_platform.discovery.formats import (
+    FormatAction,
+    suffix_match,
+    type_from_hint,
+)
 from material_platform.domain.enums import MaterialType
 
 CLASSIFIER = "deterministic"
@@ -10,7 +15,23 @@ CLASSIFIER_VERSION = "v1"
 PDF_SUFFIXES = frozenset({".pdf"})
 TEXT_SUFFIXES = frozenset({".txt", ".md", ".rst"})
 CSV_SUFFIXES = frozenset({".csv", ".tsv"})
-CODE_SUFFIXES = frozenset({".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"})
+CODE_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".kts",
+        ".ipynb",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -70,5 +91,18 @@ def classify_files(paths: tuple[str, ...]) -> ClassificationDecision:
             0.85,
             (f"code_files:{len(paths)}",),
         )
+
+    if len(paths) == 1:
+        matched = suffix_match(Path(paths[0]).name)
+        if matched is not None:
+            action, kind = matched
+            mapped = type_from_hint(kind)
+            if mapped is not None and action is not FormatAction.EXPAND:
+                return ClassificationDecision(
+                    mapped[0],
+                    mapped[1],
+                    0.9,
+                    (f"suffix:{kind}",),
+                )
 
     return ClassificationDecision(MaterialType.UNKNOWN, None, 0.0, ("unmatched",))

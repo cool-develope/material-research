@@ -14,6 +14,8 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.pipeline_version == "process-v1"
     assert settings.max_archive_depth == 5
     assert settings.minio_bucket == "material"
+    assert settings.max_extract_bytes == 8 * 1024 * 1024
+    assert settings.retry_delay_seconds == 2
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:

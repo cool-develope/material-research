@@ -69,6 +69,7 @@ class DiscoveryContext:
         material_hint: str | None = None,
         include_path_in_origin: bool = True,
         local_path: Path | None = None,
+        extra: dict[str, object] | None = None,
     ) -> DiscoveryNode:
         origin = self.origin_chain + ((path,) if include_path_in_origin else ())
         metadata: dict[str, object] = {"origin_chain": list(origin)}
@@ -76,6 +77,8 @@ class DiscoveryContext:
             metadata["material_hint"] = material_hint
         if local_path is not None:
             metadata["local_path"] = str(local_path.resolve())
+        if extra:
+            metadata.update(extra)
         node = DiscoveryNode(
             node_id=uuid4(),
             source_id=self.source_id,

@@ -11,6 +11,7 @@ from material_platform.discovery.archive import ArchiveLimits
 from material_platform.domain.enums import MaterialType
 from material_platform.infrastructure.object_store import (
     FilesystemObjectStore,
+    discovery_manifest,
     material_content,
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
@@ -119,3 +120,14 @@ def test_ingest_complex_zip_copies_content_and_skips_junk(
     )
     assert leftover == []
     _ = workspace
+
+
+def test_ingest_writes_discovery_manifest(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    paper = tmp_path / "paper.pdf"
+    paper.write_bytes(b"%PDF-1.4")
+    result, store, _workspace = _ingest(session, tmp_path, paper)
+    uri = discovery_manifest(result.source.source_id, result.run.discovery_run_id)
+    assert store.exists(uri)

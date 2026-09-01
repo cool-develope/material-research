@@ -13,7 +13,7 @@ class ProcessConfig(dg.Config):
 
 @dg.op(
     pool="document_extraction",
-    retry_policy=dg.RetryPolicy(max_retries=2, delay=0.1),
+    retry_policy=dg.RetryPolicy(max_retries=2, delay=2),
 )
 def process_material(
     context: dg.OpExecutionContext,
@@ -21,6 +21,7 @@ def process_material(
     platform: PlatformResource,
 ) -> str:
     material_id = UUID(config.material_id)
+    settings = platform.settings()
     with platform.session() as session:
         material = MaterialRepository(session).get(material_id)
         if material is None:
@@ -28,8 +29,9 @@ def process_material(
         result = ProcessMaterialService(
             session,
             platform.store(),
-            pipeline_version=platform.settings().pipeline_version,
+            pipeline_version=settings.pipeline_version,
             dagster_run_id=context.run_id,
+            max_extract_bytes=settings.max_extract_bytes,
         ).process(material)
     context.log.info("material %s is %s", material_id, result.material.status.value)
     return str(result.material.material_id)

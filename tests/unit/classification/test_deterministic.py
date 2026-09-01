@@ -31,3 +31,39 @@ def test_project_marker_beats_nested_csv() -> None:
     decision = classify_files(("package.json", "data/rows.csv"))
     assert decision.material_type is MaterialType.PROJECT
     assert decision.subtype == "node"
+
+
+def test_classifies_wheel_as_code() -> None:
+    decision = classify_files(("requests-2.32.3-py3-none-any.whl",))
+    assert decision.material_type is MaterialType.CODE
+    assert decision.subtype == "python_wheel"
+
+
+def test_classifies_jar_as_code() -> None:
+    decision = classify_files(("guava.jar",))
+    assert decision.material_type is MaterialType.CODE
+    assert decision.subtype == "java_jar"
+
+
+def test_classifies_docx_as_document() -> None:
+    decision = classify_files(("notes.docx",))
+    assert decision.material_type is MaterialType.DOCUMENT
+    assert decision.subtype == "docx"
+
+
+def test_classifies_exe_as_installer() -> None:
+    decision = classify_files(("AndroidStudio-setup.exe",))
+    assert decision.material_type is MaterialType.UNKNOWN
+    assert decision.subtype == "installer"
+
+
+def test_classifies_go_project_from_root_marker() -> None:
+    decision = classify_files(("go.mod", "main.go"))
+    assert decision.material_type is MaterialType.PROJECT
+    assert decision.subtype == "go"
+
+
+def test_classifies_notebook_as_code() -> None:
+    decision = classify_files(("notes.ipynb",))
+    assert decision.material_type is MaterialType.CODE
+    assert decision.subtype == "ipynb"

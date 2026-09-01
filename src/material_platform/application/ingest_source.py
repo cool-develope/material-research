@@ -7,8 +7,13 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from material_platform.application.content import copy_material_content, tree_digest
+from material_platform.application.content import (
+    copy_material_content,
+    tree_digest,
+    write_discovery_manifest,
+)
 from material_platform.discovery.archive import ArchiveLimits, SafeZipExpander
+from material_platform.discovery.formats import type_from_hint
 from material_platform.discovery.inspector import PathInspector
 from material_platform.discovery.service import DiscoveryService
 from material_platform.discovery.skips import is_skipped_name
@@ -43,6 +48,25 @@ from material_platform.infrastructure.object_store.protocol import ObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
 _DOCUMENT_SUFFIXES = frozenset({".pdf", ".md", ".txt", ".rst"})
+
+
+def _material_name(root_path: str, node: DiscoveryNode) -> str:
+    title = node.metadata.get("artifact_title")
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return Path(root_path.rstrip("/")).name or root_path
+
+
+def _material_type(node: DiscoveryNode) -> tuple[MaterialType, str | None]:
+    hint = node.metadata.get("material_hint")
+    if isinstance(hint, str):
+        mapped = type_from_hint(hint)
+        if mapped is not None:
+            return mapped
+    suffix = Path(node.path).suffix.lower()
+    if suffix in _DOCUMENT_SUFFIXES:
+        return MaterialType.DOCUMENT, suffix.lstrip(".")
+    return MaterialType.UNKNOWN, None
 
 
 @dataclass(frozen=True)
@@ -117,6 +141,7 @@ class IngestSourceService:
             self._nodes.add_all(list(manifest.nodes))
             self._session.flush()
             materials = self._upsert_materials(manifest)
+            write_discovery_manifest(self._store, manifest)
             source = source.model_copy(update={"status": SourceStatus.COMPLETED})
             run = run.model_copy(
                 update={
@@ -208,7 +233,7 @@ class IngestSourceService:
             source_id=node.source_id,
             discovery_node_id=node.node_id,
             discovery_version=self._discovery_version,
-            name=_material_name(node.path),
+            name=_material_name(node.path, node),
             root_path=node.path,
             content_root_uri=material_content_root(material_id),
             content_digest=digest,
@@ -218,12 +243,23 @@ class IngestSourceService:
             ),
             material_type=material_type,
             material_subtype=subtype,
-            metadata={
-                "origin_chain": origin,
-                "material_hint": node.metadata.get("material_hint"),
-            },
+            metadata=_material_metadata(node, origin),
         )
         return self._materials.upsert(material)
+
+
+def _material_metadata(
+    node: DiscoveryNode, origin: object
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "origin_chain": origin,
+        "material_hint": node.metadata.get("material_hint"),
+    }
+    for key in ("format", "package", "version", "artifact_title"):
+        value = node.metadata.get(key)
+        if value:
+            metadata[key] = value
+    return metadata
 
 
 def _source_type(kind: NodeKind) -> SourceType:
@@ -251,19 +287,3 @@ def _source_digest(path: Path) -> tuple[str, int]:
         total += size
         entries.append((relative.as_posix(), digest))
     return tree_digest(entries), total
-
-
-def _material_name(root_path: str) -> str:
-    return Path(root_path.rstrip("/")).name or root_path
-
-
-def _material_type(node: DiscoveryNode) -> tuple[MaterialType, str | None]:
-    hint = node.metadata.get("material_hint")
-    if isinstance(hint, str) and hint.endswith("_project"):
-        return MaterialType.PROJECT, hint.removesuffix("_project")
-    if hint == "csv_dataset":
-        return MaterialType.DATASET, "csv"
-    suffix = Path(node.path).suffix.lower()
-    if suffix in _DOCUMENT_SUFFIXES:
-        return MaterialType.DOCUMENT, suffix.lstrip(".")
-    return MaterialType.UNKNOWN, None

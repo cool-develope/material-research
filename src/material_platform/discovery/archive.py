@@ -41,6 +41,10 @@ class SafeZipExpander:
     def __init__(self, limits: ArchiveLimits) -> None:
         self._limits = limits
 
+    @property
+    def limits(self) -> ArchiveLimits:
+        return self._limits
+
     def expand(self, archive_path: Path, destination: Path) -> Path:
         destination = destination.resolve()
         destination.mkdir(parents=True, exist_ok=True)

@@ -39,6 +39,26 @@ def test_dataset_detector_requires_csv_files(tmp_path: Path) -> None:
     assert result.material_hint == "csv_dataset"
 
 
+def test_named_data_dir_with_csv_subdirs_is_dataset(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    nested = data / "run1"
+    nested.mkdir(parents=True)
+    (nested / "rows.csv").write_text("a,b\n1,2\n")
+    result = DatasetBoundaryDetector().detect(data)
+    assert result is not None
+    assert result.material_hint == "csv_dataset"
+
+
+def test_nested_project_inside_data_is_not_a_dataset(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "rows.csv").write_text("a,b\n1,2\n")
+    nested = data / "model"
+    nested.mkdir()
+    (nested / "pyproject.toml").write_text("[project]\nname='x'\n")
+    assert DatasetBoundaryDetector().detect(data) is None
+
+
 def test_composite_prefers_project_over_dataset(tmp_path: Path) -> None:
     mixed = tmp_path / "dataset"
     mixed.mkdir()

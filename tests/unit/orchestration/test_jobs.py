@@ -3,7 +3,7 @@ from uuid import UUID
 
 import dagster as dg
 from defs.jobs.ingest_source import ingest_source_job
-from defs.jobs.process_material import process_material_job
+from defs.jobs.process_material import process_material, process_material_job
 from defs.resources import PlatformResource
 from defs.sensors.pending_materials import pending_materials_sensor
 
@@ -74,3 +74,31 @@ def test_pending_sensor_claims_discovered_materials(tmp_path: Path) -> None:
 
     loaded = _materials(platform)
     assert {item.status for item in loaded} == {MaterialStatus.PROCESSING}
+
+
+def test_process_retry_delay_is_seconds() -> None:
+    policy = process_material.retry_policy
+    assert policy is not None
+    assert policy.delay == 2
+    assert policy.max_retries == 2
+
+
+def test_reingest_job_after_restart_does_not_duplicate(tmp_path: Path) -> None:
+    mixed = make_mixed_tree(tmp_path / "mixed")
+    archive = zip_contents(mixed, tmp_path / "research.zip")
+    data_dir = str(tmp_path / "data")
+    run_config = {
+        "ops": {"ingest_source": {"config": {"path": str(archive)}}}
+    }
+    first = ingest_source_job.execute_in_process(
+        run_config=run_config,
+        resources={"platform": PlatformResource(data_dir=data_dir)},
+    )
+    second = ingest_source_job.execute_in_process(
+        run_config=run_config,
+        resources={"platform": PlatformResource(data_dir=data_dir)},
+    )
+    assert first.success and second.success
+    assert first.output_for_node("ingest_source") == second.output_for_node(
+        "ingest_source"
+    )

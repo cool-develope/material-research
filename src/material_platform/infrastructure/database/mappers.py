@@ -2,6 +2,7 @@ from material_platform.domain import (
     BoundaryEvidence,
     DiscoveryNode,
     DiscoveryRun,
+    IndexEntry,
     Material,
     MaterialArtifact,
     MaterialClassification,
@@ -21,6 +22,7 @@ from material_platform.domain.enums import (
 from material_platform.infrastructure.database.models import (
     DiscoveryNodeRow,
     DiscoveryRunRow,
+    IndexEntryRow,
     MaterialArtifactRow,
     MaterialClassificationRow,
     MaterialRow,
@@ -279,4 +281,51 @@ def artifact_from_row(row: MaterialArtifactRow) -> MaterialArtifact:
         storage_uri=row.storage_uri,
         sha256=row.sha256,
         created_at=row.created_at,
+    )
+
+
+def _float_tuple(value: object) -> tuple[float, ...]:
+    if not isinstance(value, list):
+        return ()
+    numbers: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int | float):
+            raise TypeError("embedding values must be numbers")
+        numbers.append(float(item))
+    return tuple(numbers)
+
+
+def index_entry_to_row(entry: IndexEntry) -> IndexEntryRow:
+    return IndexEntryRow(
+        entry_id=entry.entry_id,
+        material_id=entry.material_id,
+        unit_id=entry.unit_id,
+        index_version=entry.index_version,
+        title=entry.title,
+        content=entry.content,
+        path=entry.path,
+        page=entry.page,
+        line_start=entry.line_start,
+        line_end=entry.line_end,
+        section=entry.section,
+        tokens=entry.tokens,
+        embedding=list(entry.embedding),
+    )
+
+
+def index_entry_from_row(row: IndexEntryRow) -> IndexEntry:
+    return IndexEntry(
+        entry_id=row.entry_id,
+        material_id=row.material_id,
+        unit_id=row.unit_id,
+        index_version=row.index_version,
+        title=row.title,
+        content=row.content,
+        path=row.path,
+        page=row.page,
+        line_start=row.line_start,
+        line_end=row.line_end,
+        section=row.section,
+        tokens=row.tokens,
+        embedding=_float_tuple(row.embedding),
     )

@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import dagster as dg
+from pydantic import PrivateAttr
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from material_platform.config import Settings
@@ -14,7 +16,7 @@ from material_platform.infrastructure.database.engine import (
     make_session_factory,
 )
 from material_platform.infrastructure.database.models import Base
-from material_platform.infrastructure.object_store import FilesystemObjectStore
+from material_platform.infrastructure.object_store import make_object_store
 from material_platform.infrastructure.object_store.protocol import ObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
@@ -22,6 +24,8 @@ from material_platform.infrastructure.workspace import TemporaryWorkspace
 class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
     data_dir: str = "/tmp/material-platform"
     use_sqlite: bool = True
+    _engine: Engine | None = PrivateAttr(default=None)
+    _sessions: sessionmaker[Session] | None = PrivateAttr(default=None)
 
     def settings(self) -> Settings:
         data = Path(self.data_dir)
@@ -36,14 +40,26 @@ class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
             )
         return settings.model_copy(update={"workspace_root": data})
 
+    def engine(self) -> Engine:
+        if self._engine is None:
+            engine = make_engine(self.settings())
+            if self.use_sqlite:
+                Base.metadata.create_all(engine)
+            self._engine = engine
+        return self._engine
+
     def session_factory(self) -> sessionmaker[Session]:
-        settings = self.settings()
-        engine = make_engine(settings)
-        Base.metadata.create_all(engine)
-        return make_session_factory(engine)
+        if self._sessions is None:
+            self._sessions = make_session_factory(self.engine())
+        return self._sessions
 
     def store(self) -> ObjectStore:
-        return FilesystemObjectStore(Path(self.data_dir) / "store")
+        if self.use_sqlite:
+            return make_object_store(
+                self.settings(),
+                filesystem_root=Path(self.data_dir) / "store",
+            )
+        return make_object_store(self.settings())
 
     def workspace(self) -> TemporaryWorkspace:
         return TemporaryWorkspace(Path(self.data_dir))

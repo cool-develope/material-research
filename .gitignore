@@ -11,5 +11,8 @@ build/
 htmlcov/
 .env
 *.log
+.dagster/
+.tmp_dagster_home*/
 
-research/
+# Architecture notes at the repo root — not the Python package.
+/research/

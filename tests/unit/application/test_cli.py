@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from material_platform.application.cli import main
+from material_platform.application.query import main as query_main
 from tests.unit.discovery.trees import (
     COMPLEX_MATERIALS,
     FIXTURE_ZIP,
@@ -61,3 +62,26 @@ def test_ingest_local_cli_process_complex_fixture(
     assert "page 1" in captured.out
     assert "src/app.js lines " in captured.out
     assert "snippet.py lines " in captured.out
+
+
+def test_research_query_cli_prints_citations(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mixed = make_mixed_tree(tmp_path / "mixed")
+    archive = zip_contents(mixed, tmp_path / "research.zip")
+    data_dir = tmp_path / "data"
+    assert main([str(archive), "--data-dir", str(data_dir), "--process"]) == 0
+    capsys.readouterr()
+
+    code = query_main(
+        ["Introduction to materials", "--data-dir", str(data_dir)]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "paper.pdf page 1" in captured.out
+
+    code = query_main(["handle_request", "--data-dir", str(data_dir)])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "src/api.py lines " in captured.out

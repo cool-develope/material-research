@@ -13,6 +13,7 @@ dependencies = [
     "minio>=7,<8",
     "pypdf>=5,<7",
     "dagster>=1.13,<1.15",
+    "py7zr>=1.1.3",
 ]
 
 [dependency-groups]

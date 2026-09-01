@@ -7,6 +7,7 @@ from material_platform.domain.enums import DiscoveryRole, NodeKind
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.discovery.trees import (
     make_mixed_tree,
+    make_nested_lab_data,
     make_python_project,
     zip_contents,
     zip_named,
@@ -133,3 +134,21 @@ def test_nested_marker_does_not_make_parent_a_project(tmp_path: Path) -> None:
 
     materials = _materials(_discover(_service(tmp_path), root))
     assert sorted(node.path for node in materials) == ["README.md", "src/"]
+
+
+def test_nested_lab_data_is_one_dataset(tmp_path: Path) -> None:
+    tree = make_nested_lab_data(tmp_path / "dump")
+    materials = _materials(_discover(_service(tmp_path), tree))
+    assert [node.path for node in materials] == ["lab/data/"]
+    assert materials[0].metadata["material_hint"] == "csv_dataset"
+    assert not any(node.path.endswith(".csv") for node in materials)
+
+
+def test_pdf_and_csv_at_root_stay_separate_files(tmp_path: Path) -> None:
+    root = tmp_path / "mixed"
+    root.mkdir()
+    (root / "paper.pdf").write_bytes(b"%PDF-1.4")
+    (root / "stats.csv").write_text("n,value\n1,2\n")
+    materials = _materials(_discover(_service(tmp_path), root))
+    assert sorted(node.path for node in materials) == ["paper.pdf", "stats.csv"]
+    assert all(node.node_kind is NodeKind.FILE for node in materials)

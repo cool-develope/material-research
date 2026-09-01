@@ -12,6 +12,13 @@ from material_platform.extraction.common import MaterialFile
 from material_platform.extraction.csv import extract_csv
 from material_platform.extraction.pdf import extract_pdf
 from material_platform.extraction.project import extract_project
+from material_platform.extraction.stub import (
+    extract_artifact,
+    extract_stub,
+    is_artifact_subtype,
+    is_binary_subtype,
+    is_office_subtype,
+)
 from material_platform.extraction.text import extract_text
 
 EXTRACTOR = "extractors"
@@ -28,6 +35,27 @@ def extract_units(
         return tuple(extract_csv(item) for item in files)
     if decision.material_type is MaterialType.DOCUMENT and decision.subtype == "pdf":
         return _flatten(extract_pdf(item) for item in files)
+    if is_artifact_subtype(decision.subtype):
+        return tuple(extract_artifact(item, decision.subtype) for item in files)
+    if is_office_subtype(decision.subtype):
+        return tuple(
+            extract_stub(
+                item,
+                unit_type="office",
+                content=f"Office document ({decision.subtype})",
+            )
+            for item in files
+        )
+    if is_binary_subtype(decision.subtype):
+        return tuple(
+            extract_stub(
+                item,
+                unit_type="binary",
+                content=f"Binary or installer ({decision.subtype})",
+                extra={"size": len(item.data)},
+            )
+            for item in files
+        )
     if decision.material_type in {MaterialType.DOCUMENT, MaterialType.CODE}:
         return tuple(extract_text(item) for item in files)
     return _flatten(_extract_by_suffix(item) for item in files)

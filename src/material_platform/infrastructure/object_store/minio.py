@@ -18,11 +18,14 @@ class MinioObjectStore:
             secure=settings.minio_secure,
         )
         self._bucket = settings.minio_bucket
-        self.ensure_bucket()
+        self._bucket_ready = False
 
     def ensure_bucket(self) -> None:
+        if self._bucket_ready:
+            return
         if not self._client.bucket_exists(self._bucket):
             self._client.make_bucket(self._bucket)
+        self._bucket_ready = True
 
     def put(
         self,
@@ -33,6 +36,7 @@ class MinioObjectStore:
         content_type: str | None = None,
     ) -> None:
         key = safe_object_key(uri)
+        self.ensure_bucket()
         self._client.put_object(
             self._bucket,
             key,
@@ -43,11 +47,13 @@ class MinioObjectStore:
 
     def open(self, uri: str) -> BinaryIO:
         key = safe_object_key(uri)
+        self.ensure_bucket()
         return cast(BinaryIO, self._client.get_object(self._bucket, key))
 
     def exists(self, uri: str) -> bool:
         key = safe_object_key(uri)
         try:
+            self.ensure_bucket()
             self._client.stat_object(self._bucket, key)
         except S3Error as exc:
             if exc.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:

@@ -1,3 +1,4 @@
+from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.ingest_source import (
     IngestResult,
     IngestSourceService,
@@ -14,6 +15,7 @@ from material_platform.application.tree import (
 )
 
 __all__ = [
+    "DeepResearchService",
     "IngestResult",
     "IngestSourceService",
     "ProcessMaterialService",

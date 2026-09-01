@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     max_member_bytes: int = 512 * 1024**2
     max_compression_ratio: float = 200.0
     max_archive_timeout_seconds: int = 60
+    max_extract_bytes: int = 8 * 1024 * 1024
+    retry_delay_seconds: int = 2
 
 
 def get_settings() -> Settings:
