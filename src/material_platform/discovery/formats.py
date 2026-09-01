@@ -36,6 +36,8 @@ _SUFFIX: dict[str, tuple[FormatAction, str]] = {
     ".war": (FormatAction.ARTIFACT, "java_war"),
     ".nupkg": (FormatAction.ARTIFACT, "nuget"),
     ".docx": (FormatAction.FILE, "docx"),
+    ".docm": (FormatAction.FILE, "docm"),
+    ".doc": (FormatAction.FILE, "doc"),
     ".xlsx": (FormatAction.FILE, "xlsx"),
     ".pptx": (FormatAction.FILE, "pptx"),
     ".apk": (FormatAction.FILE, "android_apk"),
@@ -61,6 +63,8 @@ _HINT_TYPE: dict[str, tuple[MaterialType, str]] = {
     "nuget": (MaterialType.CODE, "nuget"),
     "node_tarball": (MaterialType.CODE, "node_tarball"),
     "docx": (MaterialType.DOCUMENT, "docx"),
+    "docm": (MaterialType.DOCUMENT, "docm"),
+    "doc": (MaterialType.DOCUMENT, "doc"),
     "xlsx": (MaterialType.SPREADSHEET, "xlsx"),
     "pptx": (MaterialType.PRESENTATION, "pptx"),
     "android_apk": (MaterialType.UNKNOWN, "android_apk"),
@@ -80,7 +84,10 @@ ARTIFACT_FORMATS = frozenset(
         "node_tarball",
     }
 )
-OFFICE_FORMATS = frozenset({"docx", "xlsx", "pptx"})
+DOCX_FORMATS = frozenset({"docx", "docm"})
+LEGACY_DOC_FORMATS = frozenset({"doc"})
+STUB_OFFICE_FORMATS = frozenset({"xlsx", "pptx"})
+OFFICE_FORMATS = DOCX_FORMATS | LEGACY_DOC_FORMATS | STUB_OFFICE_FORMATS
 BINARY_FORMATS = frozenset(
     {"installer", "binary", "android_apk", "ios_ipa", "appx"}
 )

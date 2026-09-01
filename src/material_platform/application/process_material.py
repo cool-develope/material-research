@@ -58,11 +58,17 @@ class ProcessMaterialService:
         pipeline_version: str = "process-v1",
         dagster_run_id: str | None = None,
         max_extract_bytes: int = 8 * 1024 * 1024,
+        max_units_per_material: int = 20,
+        chunk_tokens: int = 512,
+        chunk_overlap_tokens: int = 64,
     ) -> None:
         self._session = session
         self._store = store
         self._dagster_run_id = dagster_run_id
         self._max_extract_bytes = max_extract_bytes
+        self._max_units = max_units_per_material
+        self._chunk_tokens = chunk_tokens
+        self._chunk_overlap = chunk_overlap_tokens
         self._sources = SourceRepository(session)
         self._materials = MaterialRepository(session)
         self._classifications = ClassificationRepository(session)
@@ -146,7 +152,13 @@ class ProcessMaterialService:
         self._materials.save(material)
         self._session.flush()
 
-        units = extract_units(decision, files)
+        units = extract_units(
+            decision,
+            files,
+            max_units=self._max_units,
+            chunk_tokens=self._chunk_tokens,
+            chunk_overlap=self._chunk_overlap,
+        )
         self._store_json(
             material.material_id,
             artifact_type="extraction",

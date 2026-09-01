@@ -86,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
                 store,
                 pipeline_version=settings.pipeline_version,
                 max_extract_bytes=settings.max_extract_bytes,
+                max_units_per_material=settings.max_units_per_material,
+                chunk_tokens=settings.chunk_tokens,
+                chunk_overlap_tokens=settings.chunk_overlap_tokens,
             )
             items: list[ProcessResult] = []
             for material in result.materials:

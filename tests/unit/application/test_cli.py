@@ -80,6 +80,8 @@ def test_research_query_cli_prints_citations(
     captured = capsys.readouterr()
     assert code == 0
     assert "paper.pdf page 1" in captured.out
+    assert "backend/" in captured.out
+    assert "dataset/" in captured.out
 
     code = query_main(["handle_request", "--data-dir", str(data_dir)])
     captured = capsys.readouterr()

@@ -51,6 +51,12 @@ def test_classifies_docx_as_document() -> None:
     assert decision.subtype == "docx"
 
 
+def test_classifies_legacy_doc_as_document() -> None:
+    decision = classify_files(("old.doc",))
+    assert decision.material_type is MaterialType.DOCUMENT
+    assert decision.subtype == "doc"
+
+
 def test_classifies_exe_as_installer() -> None:
     decision = classify_files(("AndroidStudio-setup.exe",))
     assert decision.material_type is MaterialType.UNKNOWN

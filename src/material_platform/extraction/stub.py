@@ -5,7 +5,10 @@ from pathlib import Path
 from material_platform.discovery.formats import (
     ARTIFACT_FORMATS,
     BINARY_FORMATS,
+    DOCX_FORMATS,
+    LEGACY_DOC_FORMATS,
     OFFICE_FORMATS,
+    STUB_OFFICE_FORMATS,
 )
 from material_platform.discovery.peek import peek_zip_bytes
 from material_platform.domain.research_material import ContentUnit
@@ -53,6 +56,18 @@ def is_artifact_subtype(subtype: str | None) -> bool:
 
 def is_office_subtype(subtype: str | None) -> bool:
     return subtype in OFFICE_FORMATS
+
+
+def is_docx_subtype(subtype: str | None) -> bool:
+    return subtype in DOCX_FORMATS
+
+
+def is_legacy_doc_subtype(subtype: str | None) -> bool:
+    return subtype in LEGACY_DOC_FORMATS
+
+
+def is_stub_office_subtype(subtype: str | None) -> bool:
+    return subtype in STUB_OFFICE_FORMATS
 
 
 def is_binary_subtype(subtype: str | None) -> bool:

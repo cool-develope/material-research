@@ -11,3 +11,4 @@ class Citation(Contract):
     citation: str
     snippet: str
     score: float
+    siblings: tuple[str, ...] = ()

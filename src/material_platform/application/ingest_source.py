@@ -47,7 +47,9 @@ from material_platform.infrastructure.object_store.paths import (
 from material_platform.infrastructure.object_store.protocol import ObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
-_DOCUMENT_SUFFIXES = frozenset({".pdf", ".md", ".txt", ".rst"})
+_DOCUMENT_SUFFIXES = frozenset(
+    {".pdf", ".md", ".txt", ".rst", ".docx", ".doc", ".docm"}
+)
 
 
 def _material_name(root_path: str, node: DiscoveryNode) -> str:

@@ -27,11 +27,13 @@ def write_jar(path: Path, *, title: str = "guava", version: str = "32.0") -> Pat
     return path
 
 
-def write_docx(path: Path) -> Path:
+def write_docx(path: Path, text: str = "Notes on materials") -> Path:
+    from docx import Document
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    with ZipFile(path, "w") as archive:
-        archive.writestr("[Content_Types].xml", "<Types/>")
-        archive.writestr("word/document.xml", "<w:document/>")
+    document = Document()
+    document.add_paragraph(text)
+    document.save(path)
     return path
 
 

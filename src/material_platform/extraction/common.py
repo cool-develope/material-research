@@ -42,7 +42,9 @@ def make_unit(
     page: int | None = None,
     line_start: int | None = None,
     line_end: int | None = None,
+    section: str | None = None,
     metadata: dict[str, object] | None = None,
+    chunk_key: str | None = None,
 ) -> ContentUnit:
     if page is not None:
         unit_id = f"{path}:page:{page}"
@@ -50,6 +52,8 @@ def make_unit(
         unit_id = f"{path}:lines:{line_start}-{line_end}"
     else:
         unit_id = path
+    if chunk_key:
+        unit_id = f"{unit_id}:{chunk_key}"
     return ContentUnit(
         unit_id=unit_id,
         type=unit_type,
@@ -59,6 +63,7 @@ def make_unit(
             page=page,
             line_start=line_start,
             line_end=line_end,
+            section=section,
         ),
         digest=unit_digest(content),
         metadata=metadata or {},

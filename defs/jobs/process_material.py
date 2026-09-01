@@ -32,6 +32,9 @@ def process_material(
             pipeline_version=settings.pipeline_version,
             dagster_run_id=context.run_id,
             max_extract_bytes=settings.max_extract_bytes,
+            max_units_per_material=settings.max_units_per_material,
+            chunk_tokens=settings.chunk_tokens,
+            chunk_overlap_tokens=settings.chunk_overlap_tokens,
         ).process(material)
     context.log.info("material %s is %s", material_id, result.material.status.value)
     return str(result.material.material_id)

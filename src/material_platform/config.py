@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     max_compression_ratio: float = 200.0
     max_archive_timeout_seconds: int = 60
     max_extract_bytes: int = 8 * 1024 * 1024
+    max_units_per_material: int = 20
+    chunk_tokens: int = 512
+    chunk_overlap_tokens: int = 64
     retry_delay_seconds: int = 2
 
 

@@ -63,4 +63,6 @@ def _print_citations(citations: tuple[Citation, ...]) -> int:
         )
         if citation.snippet:
             print(f"   {citation.snippet}")
+        if citation.siblings:
+            print(f"   also: {', '.join(citation.siblings)}")
     return 0

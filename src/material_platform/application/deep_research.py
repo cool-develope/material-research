@@ -1,23 +1,74 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from material_platform.application.tree import format_location
 from material_platform.domain.citation import Citation
+from material_platform.domain.enums import MaterialStatus
+from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation
 from material_platform.index import IndexService
 from material_platform.index.service import ScoredEntry
+from material_platform.infrastructure.database.repositories import MaterialRepository
 
 _SNIPPET = 160
+_SOURCE_BOOST = 0.05
 
 
 class DeepResearchService:
     def __init__(self, session: Session) -> None:
         self._index = IndexService(session)
+        self._materials = MaterialRepository(session)
 
     def select(self, query: str, *, limit: int = 5) -> tuple[Citation, ...]:
-        return tuple(_citation(hit) for hit in self._index.search(query, limit=limit))
+        hits = self._index.search(query, limit=max(limit, 5))
+        loaded = _load_materials(self._materials, hits)
+        hits = _boost_same_source(hits, loaded)[:limit]
+        return tuple(_citation(hit, loaded, self._materials) for hit in hits)
 
 
-def _citation(hit: ScoredEntry) -> Citation:
+def _load_materials(
+    repo: MaterialRepository,
+    hits: tuple[ScoredEntry, ...],
+) -> dict[UUID, Material]:
+    found: dict[UUID, Material] = {}
+    for hit in hits:
+        material_id = hit.entry.material_id
+        if material_id in found:
+            continue
+        material = repo.get(material_id)
+        if material is not None:
+            found[material_id] = material
+    return found
+
+
+def _boost_same_source(
+    hits: tuple[ScoredEntry, ...],
+    loaded: dict[UUID, Material],
+) -> tuple[ScoredEntry, ...]:
+    if not hits:
+        return hits
+    top = loaded.get(hits[0].entry.material_id)
+    if top is None:
+        return hits
+    boosted: list[ScoredEntry] = []
+    for hit in hits:
+        material = loaded.get(hit.entry.material_id)
+        extra = (
+            _SOURCE_BOOST
+            if material is not None and material.source_id == top.source_id
+            else 0.0
+        )
+        boosted.append(ScoredEntry(entry=hit.entry, score=hit.score + extra))
+    boosted.sort(key=lambda item: item.score, reverse=True)
+    return tuple(boosted)
+
+
+def _citation(
+    hit: ScoredEntry,
+    loaded: dict[UUID, Material],
+    repo: MaterialRepository,
+) -> Citation:
     location = ContentLocation(
         path=hit.entry.path,
         page=hit.entry.page,
@@ -25,6 +76,7 @@ def _citation(hit: ScoredEntry) -> Citation:
         line_end=hit.entry.line_end,
         section=hit.entry.section,
     )
+    material = loaded.get(hit.entry.material_id)
     return Citation(
         material_id=hit.entry.material_id,
         title=hit.entry.title,
@@ -32,7 +84,20 @@ def _citation(hit: ScoredEntry) -> Citation:
         citation=format_location(location),
         snippet=_snippet(hit.entry.content),
         score=hit.score,
+        siblings=_siblings(repo, material),
     )
+
+
+def _siblings(repo: MaterialRepository, material: Material | None) -> tuple[str, ...]:
+    if material is None:
+        return ()
+    names = [
+        item.root_path
+        for item in repo.list_for_source(material.source_id)
+        if item.material_id != material.material_id
+        and item.status is MaterialStatus.READY
+    ]
+    return tuple(sorted(names))
 
 
 def _snippet(content: str) -> str:

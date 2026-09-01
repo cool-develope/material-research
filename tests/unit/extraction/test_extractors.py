@@ -41,7 +41,8 @@ def test_project_extraction_includes_source_line_ranges() -> None:
     by_path = {unit.location.path: unit for unit in units}
     assert by_path["src/main.py"].location.line_start == 1
     assert by_path["src/main.py"].location.line_end == 1
-    assert by_path["docs/guide.md"].location.line_end == 2
+    assert "docs/guide.md" not in by_path
+    assert "pyproject.toml" in by_path
 
 
 def test_go_project_extraction_includes_go_line_ranges() -> None:
@@ -101,7 +102,24 @@ def test_wheel_extractor_summarizes_metadata() -> None:
     assert units[0].type == "artifact"
 
 
-def test_office_stub_does_not_explode_xml() -> None:
+def test_xlsx_stub_does_not_explode_xml() -> None:
+    item = MaterialFile(
+        path="grid.xlsx",
+        data=_zip_bytes(
+            {
+                "[Content_Types].xml": b"<Types/>",
+                "xl/workbook.xml": b"<workbook/>",
+            }
+        ),
+    )
+    decision = classify_files((item.path,))
+    units = extract_units(decision, (item,))
+    assert len(units) == 1
+    assert units[0].type == "office"
+    assert "xl/workbook.xml" not in units[0].content
+
+
+def test_invalid_docx_does_not_index_xml() -> None:
     item = MaterialFile(
         path="notes.docx",
         data=_zip_bytes(
@@ -114,7 +132,6 @@ def test_office_stub_does_not_explode_xml() -> None:
     decision = classify_files((item.path,))
     units = extract_units(decision, (item,))
     assert len(units) == 1
-    assert units[0].type == "office"
     assert "word/document.xml" not in units[0].content
 
 
@@ -125,3 +142,38 @@ def test_binary_stub_for_installer() -> None:
     assert len(units) == 1
     assert units[0].type == "binary"
     assert "installer" in units[0].content
+
+
+def test_project_skips_tests_and_keeps_api() -> None:
+    files = (
+        MaterialFile(path="pyproject.toml", data=b"[project]\nname='backend'\n"),
+        MaterialFile(path="src/main.py", data=b"print('ok')\n"),
+        MaterialFile(path="src/api.py", data=b"def handle_request():\n    return 1\n"),
+        MaterialFile(
+            path="tests/test_main.py",
+            data=b"def test_ok():\n    assert True\n",
+        ),
+        MaterialFile(path="docs/guide.md", data=b"# Guide\n"),
+    )
+    decision = classify_files(tuple(item.path for item in files))
+    units = extract_units(decision, files)
+    paths = {unit.location.path for unit in units}
+    assert paths == {"pyproject.toml", "src/main.py", "src/api.py"}
+
+
+def test_project_respects_unit_budget() -> None:
+    files = (
+        MaterialFile(path="pyproject.toml", data=b"[project]\nname='x'\n"),
+        MaterialFile(path="src/main.py", data=b"print(0)\n"),
+        *[
+            MaterialFile(path=f"src/api_{index:02d}.py", data=b"x = 1\n")
+            for index in range(25)
+        ],
+    )
+    decision = classify_files(tuple(item.path for item in files))
+    units = extract_units(decision, files, max_units=20)
+    assert len(units) == 20
+    paths = [unit.location.path for unit in units]
+    assert paths[0] == "pyproject.toml"
+    assert paths[1] == "src/main.py"
+    assert "src/api_24.py" not in paths

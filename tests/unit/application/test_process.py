@@ -64,6 +64,7 @@ def test_process_pdf_produces_page_locations(
     assert processed.material.status is MaterialStatus.READY
     assert processed.research.material_type is MaterialType.DOCUMENT
     assert processed.research.content_units[0].location.page == 1
+    assert processed.research.content_units[0].metadata["strategy"] == "document.pages"
     assert "Introduction" in processed.research.content_units[0].content
     assert processed.research.provenance.root_path == "paper.pdf"
     assert processed.analysis.analyzer == ANALYZER
@@ -95,10 +96,32 @@ def test_process_python_project_produces_line_ranges(
     assert ("src/main.py", 1, 1) in locations
     assert ("src/api.py", 1, 2) in locations
     assert any(path == "pyproject.toml" for path, _start, _end in locations)
+    assert not any(path.startswith("tests/") for path, _start, _end in locations)
+    assert all(
+        unit.metadata.get("strategy") == "code.file"
+        for unit in processed.research.content_units
+    )
 
     latest = ClassificationRepository(session).get_latest(material.material_id)
     assert latest is not None
     assert latest.classifier == "deterministic"
+
+
+def test_process_docx_cites_body_lines(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    write_docx(tmp_path / "notes.docx", "Introduction to materials")
+    ingested, store = _ingest(session, tmp_path, tmp_path / "notes.docx")
+    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    session.flush()
+
+    unit = processed.research.content_units[0]
+    assert processed.research.material_type is MaterialType.DOCUMENT
+    assert "Introduction to materials" in unit.content
+    assert "word/document.xml" not in unit.content
+    assert unit.location.line_start == 1
+    assert unit.metadata.get("strategy") in {"document.window", "document.sections"}
 
 
 def test_process_csv_dataset_produces_table_unit(

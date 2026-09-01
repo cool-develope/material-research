@@ -15,6 +15,8 @@ from material_platform.infrastructure.object_store import (
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.discovery.trees import make_go_project, make_mixed_tree, zip_contents
+from tests.unit.helpers.pdf import build_text_pdf
+from tests.unit.helpers.text import numbered_words
 
 
 def _ingest_and_process(session: Session, tmp_path: Path) -> None:
@@ -55,6 +57,48 @@ def test_deep_research_cites_pdf_page_and_api_lines(
     assert any(
         "src/api.py" in hit.citation and "lines " in hit.citation for hit in lines
     )
+
+
+def test_select_cites_late_pdf_page(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    pages = [f"filler page {index}" for index in range(1, 25)]
+    pages.append("unique_phrase_page25 appears here")
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(build_text_pdf(pages))
+    store = FilesystemObjectStore(tmp_path / "store")
+    workspace = TemporaryWorkspace(tmp_path / "work")
+    ingested = IngestSourceService.create(
+        session,
+        store,
+        workspace,
+        discovery_version="boundary-v1",
+        max_archive_depth=5,
+        archive_limits=ArchiveLimits(),
+    ).ingest(pdf)
+    session.flush()
+    ProcessMaterialService(session, store).process(ingested.materials[0])
+    session.flush()
+
+    hits = DeepResearchService(session).select("unique_phrase_page25")
+    assert hits
+    assert any(
+        "paper.pdf" in hit.citation and "page 25" in hit.citation for hit in hits
+    )
+
+
+def test_select_lists_same_source_siblings(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    _ingest_and_process(session, tmp_path)
+    hits = DeepResearchService(session).select("Introduction to materials")
+    assert hits
+    paper = next(hit for hit in hits if "paper.pdf" in hit.citation)
+    assert "backend/" in paper.siblings
+    assert "dataset/" in paper.siblings
+    assert "paper.pdf" not in paper.siblings
 
 
 def test_reprocess_replaces_index_entries(
@@ -115,4 +159,36 @@ def test_deep_research_cites_go_source_lines(
     assert hits
     assert any(
         "main.go" in hit.citation and "lines " in hit.citation for hit in hits
+    )
+
+
+def test_select_finds_tail_of_10k_token_document(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    notes = tmp_path / "paper.txt"
+    notes.write_text(numbered_words(12_000, "tok"))
+    store = FilesystemObjectStore(tmp_path / "store")
+    workspace = TemporaryWorkspace(tmp_path / "work")
+    ingested = IngestSourceService.create(
+        session,
+        store,
+        workspace,
+        discovery_version="boundary-v1",
+        max_archive_depth=5,
+        archive_limits=ArchiveLimits(),
+    ).ingest(notes)
+    session.flush()
+    processed = ProcessMaterialService(session, store).process(ingested.materials[0])
+    session.flush()
+    assert len(processed.research.content_units) > 20
+    assert all(
+        unit.metadata.get("strategy") == "document.window"
+        for unit in processed.research.content_units
+    )
+
+    hits = DeepResearchService(session).select("tok11999")
+    assert hits
+    assert any(
+        "paper.txt" in hit.citation and "lines " in hit.citation for hit in hits
     )
