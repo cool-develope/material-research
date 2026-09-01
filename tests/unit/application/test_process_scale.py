@@ -62,4 +62,12 @@ def test_process_wide_project_caps_files_skips_tests(
     assert "src/main.py" in paths
     assert "src/util.py" not in paths
     assert not any(path.startswith("tests/") for path in paths)
-    assert all(unit.metadata.get("strategy") == "code.file" for unit in units)
+    assert all(
+        unit.metadata.get("strategy") in {"code.file", "code.symbol"}
+        for unit in units
+    )
+    assert any(
+        unit.location.path == "src/api.py"
+        and unit.metadata.get("strategy") == "code.symbol"
+        for unit in units
+    )

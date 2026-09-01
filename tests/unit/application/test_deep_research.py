@@ -62,6 +62,22 @@ def test_deep_research_cites_pdf_page_and_api_lines(
     assert lines
     assert "src/api.py" in lines[0].citation
     assert "lines " in lines[0].citation
+    assert all("__material__" not in hit.citation for hit in pages)
+    assert all("__material__" not in hit.citation for hit in lines)
+
+
+def test_select_filters_by_material_type(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    _ingest_and_process(session, tmp_path, index)
+    research = DeepResearchService(session, index)
+    projects = research.select("handle_request", material_type="project")
+    assert projects
+    assert "src/api.py" in projects[0].citation
+    documents = research.select("handle_request", material_type="document")
+    assert all("src/api.py" not in hit.citation for hit in documents)
 
 
 def test_select_cites_late_pdf_page(
@@ -186,7 +202,7 @@ def test_select_cites_wheel_filename(
         ingested.materials[0]
     )
     session.flush()
-    assert index.count_for_material(processed.material.material_id) == 1
+    assert index.count_for_material(processed.material.material_id) == 2
 
     hits = DeepResearchService(session, index).select("requests")
     assert hits

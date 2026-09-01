@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from material_platform.analysis import ANALYZER, ANALYZER_VERSION, analyze_units
+from material_platform.analysis import Analyzer, DeterministicAnalyzer
 from material_platform.application.content import load_material_files
 from material_platform.application.queue import WorkQueue
 from material_platform.classification import (
@@ -71,6 +71,7 @@ class ProcessMaterialService:
         max_units_per_material: int = 20,
         chunk_tokens: int = 512,
         chunk_overlap_tokens: int = 64,
+        analyzer: Analyzer | None = None,
     ) -> None:
         self._session = session
         self._store = store
@@ -79,6 +80,7 @@ class ProcessMaterialService:
         self._max_units = max_units_per_material
         self._chunk_tokens = chunk_tokens
         self._chunk_overlap = chunk_overlap_tokens
+        self._analyzer = analyzer or DeterministicAnalyzer()
         self._sources = SourceRepository(session)
         self._materials = MaterialRepository(session)
         self._classifications = ClassificationRepository(session)
@@ -178,12 +180,12 @@ class ProcessMaterialService:
         )
         material = self._set_status(material, MaterialStatus.EXTRACTED)
 
-        analysis = analyze_units(material, decision, units)
+        analysis = self._analyzer.analyze(material, decision, units)
         self._store_json(
             material.material_id,
             artifact_type="analysis",
-            processor=ANALYZER,
-            processor_version=ANALYZER_VERSION,
+            processor=analysis.analyzer,
+            processor_version=analysis.analyzer_version,
             payload=analysis.model_dump(mode="json"),
         )
         material = self._set_status(material, MaterialStatus.ANALYZED)

@@ -25,6 +25,9 @@ FIXTURE_ZIP = (
 SIMPLE_ZIP = (
     Path(__file__).resolve().parents[2] / "fixtures" / "simple_mix" / "research.zip"
 )
+EVAL_HARD_ZIP = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "eval_hard" / "research.zip"
+)
 
 
 def make_go_project(path: Path) -> Path:
@@ -91,6 +94,43 @@ def make_mixed_tree(path: Path) -> Path:
     (path / "paper.pdf").write_bytes(build_text_pdf(["Introduction to materials"]))
     make_python_project(path / "backend")
     make_dataset(path / "dataset")
+    return path
+
+
+def make_eval_hard_tree(path: Path) -> Path:
+    path.mkdir(parents=True)
+    (path / "README.md").write_text("# Research dump\n")
+    (path / "notes.txt").write_text("todo: plot results\n")
+    (path / "stats.csv").write_text("n,value\n1,3.2\n")
+    (path / "lab_notes.md").write_text(
+        "# Lab notes\nWe measured thermal runaway of a cell on a hot plate.\n"
+    )
+    (path / "batteries.pdf").write_bytes(
+        build_text_pdf(
+            [
+                "Introduction to battery materials. Thermal properties of "
+                "lithium cells are reviewed at a high level.",
+                "Separator swelling under fast charge leads to thermal runaway. "
+                "The failure starts at the separator.",
+            ]
+        )
+    )
+    backend = path / "backend"
+    backend.mkdir()
+    (backend / "pyproject.toml").write_text("[project]\nname = 'backend'\n")
+    src = backend / "src"
+    src.mkdir()
+    (src / "main.py").write_text("print('ok')\n")
+    (src / "api.py").write_text(
+        "def handle_request(path: str) -> str:\n"
+        "    return 'ok'\n"
+        "\n"
+        "def retry_failed_request(path: str) -> str:\n"
+        "    delay = 0.1\n"
+        "    return 'backoff'\n"
+    )
+    make_dataset(path / "dataset")
+    make_requirements_project(path / "tools" / "cli")
     return path
 
 

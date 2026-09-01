@@ -23,3 +23,6 @@ class MaterialAnalysis(Contract):
     research_relevance: float | None = Field(default=None, ge=0, le=1)
     analyzer: str
     analyzer_version: str
+    digest_units: int | None = Field(default=None, ge=0)
+    digest_tokens: int | None = Field(default=None, ge=0)
+    omitted_units: int | None = Field(default=None, ge=0)

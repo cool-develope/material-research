@@ -12,6 +12,17 @@ from material_platform.domain.research_material import ContentUnit
 ANALYZER = "deterministic"
 ANALYZER_VERSION = "v1"
 
+
+class DeterministicAnalyzer:
+    def analyze(
+        self,
+        material: Material,
+        decision: ClassificationDecision,
+        units: tuple[ContentUnit, ...],
+    ) -> MaterialAnalysis:
+        return analyze_units(material, decision, units)
+
+
 _HEADING = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _FUNC = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)", re.MULTILINE)
 _CLASS = re.compile(r"^\s*class\s+([A-Za-z_]\w*)", re.MULTILINE)
@@ -166,9 +177,7 @@ def _entities(
                 if key in seen:
                     continue
                 seen.add(key)
-                found.append(
-                    AnalyzedEntity(name=name, kind=kind, location=location)
-                )
+                found.append(AnalyzedEntity(name=name, kind=kind, location=location))
         if Path(unit.location.path or "").suffix.lower() in {".js", ".ts", ".tsx"}:
             for match in _JS_EXPORT.finditer(unit.content):
                 name = match.group(1)

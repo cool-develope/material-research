@@ -125,4 +125,11 @@ def test_wide_project_caps_files_not_chunks() -> None:
     assert len(mains) > 1
     assert "main00000" in mains[0].content
     assert "main02999" in mains[-1].content
-    assert all(unit.metadata["strategy"] == "code.file" for unit in units)
+    assert all(
+        unit.metadata["strategy"] in {"code.file", "code.symbol"} for unit in units
+    )
+    assert any(
+        unit.location.path == "src/api.py"
+        and unit.metadata["strategy"] == "code.symbol"
+        for unit in units
+    )

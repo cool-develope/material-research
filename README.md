@@ -37,6 +37,30 @@ EMBEDDER=bge-m3 uv run python scripts/ingest_local.py \
   --data-dir /tmp/mp-bge --process
 EMBEDDER=bge-m3 uv run python scripts/research_query.py "handle_request" \
   --data-dir /tmp/mp-bge
+EMBEDDER=bge-m3 uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-bge
+```
+
+Harder ranking eval (eight Materials). After the same BGE ingest, the reranker is opt-in:
+
+```bash
+EMBEDDER=bge-m3 uv run python scripts/ingest_local.py \
+  tests/fixtures/eval_hard/research.zip \
+  --data-dir /tmp/mp-eval-hard-bge --process
+EMBEDDER=bge-m3 uv run python scripts/eval_retrieve.py \
+  --data-dir /tmp/mp-eval-hard-bge --cases tests/fixtures/eval/eval_hard.json
+EMBEDDER=bge-m3 RERANKER=bge-v2-m3 uv run python scripts/eval_retrieve.py \
+  --data-dir /tmp/mp-eval-hard-bge --cases tests/fixtures/eval/eval_hard.json
+```
+
+LLM analysis is one pass per Material (not per chunk). Default is deterministic. For Ollama or any OpenAI-compatible server:
+
+```bash
+ANALYZER=llm \
+LLM_BASE_URL=http://127.0.0.1:11434/v1 \
+LLM_API_KEY=ollama \
+LLM_MODEL=llama3.1 \
+uv run python scripts/ingest_local.py tests/fixtures/simple_mix/research.zip \
+  --data-dir /tmp/mp-llm --process
 ```
 
 ## Local ingest (no Dagster)
@@ -50,13 +74,16 @@ uv run python scripts/research_query.py "Introduction to materials" \
   --data-dir /tmp/mp-simple
 uv run python scripts/research_query.py "handle_request" \
   --data-dir /tmp/mp-simple
+uv run python scripts/research_query.py "handle_request" \
+  --data-dir /tmp/mp-simple --material-type project
+uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-simple --lexical-only
 ```
 
 That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
 
 Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`. `tests/` is not indexed.
 
-A larger dump lives at `tests/fixtures/mixed_zip/research.zip`.
+A larger dump lives at `tests/fixtures/mixed_zip/research.zip`. Ranking traps live at `tests/fixtures/eval_hard/research.zip`.
 
 ## Dagster pipeline
 
@@ -154,6 +181,14 @@ CLI against the same stack:
 uv run python scripts/ingest_local.py tests/fixtures/mixed_zip/research.zip \
   --postgres --process
 uv run python scripts/research_query.py "Introduction to materials" --postgres
+uv run python scripts/research_query.py "handle_request" --postgres \
+  --material-type project
+```
+
+Gate 14 (no duplicate Materials after a new Dagster resource against this stack):
+
+```bash
+LIVE_COMPOSE=1 uv run pytest tests/integration/test_compose_reingest.py
 ```
 
 ## Layout
@@ -164,7 +199,9 @@ src/material_platform/
   discovery/          boundary detectors, ZIP expansion
   application/        ingest, process, claim queue, Deep Research select
   analysis/           deterministic MaterialAnalysis
+  eval/               labeled retrieval queries and hit@1 scoring
   index/              Qdrant hybrid search (BGE-M3 or fake embedder)
+  infrastructure/     stores, embedder, optional hop-2 reranker
   research/           ResearchMaterial builder
 migrations/           Alembic (identities and state)
 tests/fixtures/       mixed ZIP used in tests and the example ingest

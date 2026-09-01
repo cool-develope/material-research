@@ -7,6 +7,7 @@ from material_platform.discovery.formats import ARTIFACT_FORMATS, BINARY_FORMATS
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import make_unit
+from material_platform.extraction.symbol import split_python_symbols
 from material_platform.extraction.window import (
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_TOKENS,
@@ -53,10 +54,31 @@ def chunk_units(
     elif material_type is MaterialType.DATASET:
         chunks = _fit_all(units, "table", size=size, overlap=overlap)
     elif material_type in {MaterialType.PROJECT, MaterialType.CODE}:
-        chunks = _fit_all(units, "code.file", size=size, overlap=overlap)
+        chunks = _code(units, size=size, overlap=overlap)
     else:
         chunks = _passthrough(units, "passthrough")
     return _number(chunks)
+
+
+def _code(
+    units: tuple[ContentUnit, ...], *, size: int, overlap: int
+) -> list[ContentUnit]:
+    chunks: list[ContentUnit] = []
+    for unit in units:
+        path = (unit.location.path or "").lower()
+        symbols = split_python_symbols(unit) if path.endswith(".py") else ()
+        if symbols:
+            for piece in symbols:
+                chunks.extend(
+                    _fit_unit(
+                        piece, strategy="code.symbol", size=size, overlap=overlap
+                    )
+                )
+            continue
+        chunks.extend(
+            _fit_unit(unit, strategy="code.file", size=size, overlap=overlap)
+        )
+    return chunks
 
 
 def _headed(units: tuple[ContentUnit, ...]) -> bool:

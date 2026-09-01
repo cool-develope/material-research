@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from material_platform.analysis import make_analyzer
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import (
     ProcessMaterialService,
@@ -99,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_units_per_material=settings.max_units_per_material,
                 chunk_tokens=settings.chunk_tokens,
                 chunk_overlap_tokens=settings.chunk_overlap_tokens,
+                analyzer=make_analyzer(settings),
             )
             items: list[ProcessResult] = []
             for material in result.materials:

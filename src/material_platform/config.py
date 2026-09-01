@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     embedder: str = "fake"
     bge_model: str = "BAAI/bge-m3"
     bge_reranker: str = "BAAI/bge-reranker-v2-m3"
+    reranker: str = "off"
+
+    analyzer: str = "deterministic"
+    llm_base_url: str | None = None
+    llm_api_key: str = "ollama"
+    llm_model: str = "llama3.1"
+    llm_timeout_seconds: int = 120
+    analysis_digest_tokens: int = 8192
+    analysis_snippet_tokens: int = 256
 
 
 def get_settings() -> Settings:

@@ -38,8 +38,16 @@ class QdrantIndexStore:
         sparse_indices: list[int],
         sparse_values: list[float],
         limit: int,
+        level: str | None = None,
+        material_ids: tuple[UUID, ...] | None = None,
+        material_type: str | None = None,
     ) -> list[models.ScoredPoint]:
         prefetch = max(limit * 4, 20)
+        query_filter = _payload_filter(level, material_ids, material_type)
+        sparse = models.SparseVector(
+            indices=sparse_indices,
+            values=sparse_values,
+        )
         result = self._client.query_points(
             collection_name=self._collection,
             prefetch=[
@@ -47,17 +55,17 @@ class QdrantIndexStore:
                     query=dense,
                     using=DENSE_NAME,
                     limit=prefetch,
+                    filter=query_filter,
                 ),
                 models.Prefetch(
-                    query=models.SparseVector(
-                        indices=sparse_indices,
-                        values=sparse_values,
-                    ),
+                    query=sparse,
                     using=SPARSE_NAME,
                     limit=prefetch,
+                    filter=query_filter,
                 ),
             ],
             query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query_filter=query_filter,
             limit=limit,
             with_payload=True,
         )
@@ -70,6 +78,38 @@ class QdrantIndexStore:
             exact=True,
         )
         return int(result.count)
+
+
+def _payload_filter(
+    level: str | None,
+    material_ids: tuple[UUID, ...] | None,
+    material_type: str | None = None,
+) -> models.Filter | None:
+    must: list[models.Condition] = []
+    if level:
+        must.append(
+            models.FieldCondition(
+                key="level",
+                match=models.MatchValue(value=level),
+            )
+        )
+    if material_ids:
+        must.append(
+            models.FieldCondition(
+                key="material_id",
+                match=models.MatchAny(any=[str(item) for item in material_ids]),
+            )
+        )
+    if material_type:
+        must.append(
+            models.FieldCondition(
+                key="material_type",
+                match=models.MatchValue(value=material_type),
+            )
+        )
+    if not must:
+        return None
+    return models.Filter(must=must)
 
 
 def _material_filter(material_id: UUID) -> models.Filter:
@@ -104,6 +144,16 @@ def _ensure_collection(client: QdrantClient, collection: str) -> None:
     client.create_payload_index(
         collection_name=collection,
         field_name="material_id",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=collection,
+        field_name="level",
+        field_schema=models.PayloadSchemaType.KEYWORD,
+    )
+    client.create_payload_index(
+        collection_name=collection,
+        field_name="material_type",
         field_schema=models.PayloadSchemaType.KEYWORD,
     )
 

@@ -23,6 +23,12 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.embedder == "fake"
     assert settings.bge_model == "BAAI/bge-m3"
     assert settings.bge_reranker == "BAAI/bge-reranker-v2-m3"
+    assert settings.reranker == "off"
+    assert settings.analyzer == "deterministic"
+    assert settings.llm_api_key == "ollama"
+    assert settings.llm_model == "llama3.1"
+    assert settings.analysis_digest_tokens == 8192
+    assert settings.analysis_snippet_tokens == 256
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:

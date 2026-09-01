@@ -8,6 +8,7 @@ from material_platform.domain.enums import MaterialStatus
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation
 from material_platform.index import IndexService
+from material_platform.index.payload import MATERIAL_UNIT_ID
 from material_platform.index.service import ScoredEntry
 from material_platform.infrastructure.database.repositories import MaterialRepository
 
@@ -27,8 +28,17 @@ class DeepResearchService:
         self._index = index
         self._materials = MaterialRepository(session)
 
-    def select(self, query: str, *, limit: int = 5) -> tuple[Citation, ...]:
-        hits = self._index.search(query, limit=max(limit, 5))
+    def select(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+    ) -> tuple[Citation, ...]:
+        hits = self._index.search(
+            query, limit=max(limit, 5), material_type=material_type
+        )
+        hits = tuple(hit for hit in hits if hit.entry.unit_id != MATERIAL_UNIT_ID)
         loaded = _load_materials(self._materials, hits)
         hits = _boost_same_source(hits, loaded)[:limit]
         return tuple(_citation(hit, loaded, self._materials) for hit in hits)

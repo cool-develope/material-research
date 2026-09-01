@@ -65,6 +65,7 @@ def test_ingest_local_cli_process_prints_research_locations(
     assert "RESEARCH" in captured.out
     assert "page 1" in captured.out
     assert "lines " in captured.out
+    assert "keywords:" in captured.out
 
 
 def test_ingest_local_cli_process_complex_fixture(
@@ -105,6 +106,32 @@ def test_research_query_cli_prints_citations(
     assert code == 0
     assert captured.out.splitlines()[0].startswith("1.")
     assert "src/api.py lines " in captured.out.splitlines()[0]
+
+    code = query_main(
+        [
+            "handle_request",
+            "--data-dir",
+            str(data_dir),
+            "--material-type",
+            "project",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "src/api.py lines " in captured.out
+
+    code = query_main(
+        [
+            "handle_request",
+            "--data-dir",
+            str(data_dir),
+            "--material-type",
+            "document",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "src/api.py" not in captured.out
 
 
 def test_ingest_long_pdf_compacts_locations(

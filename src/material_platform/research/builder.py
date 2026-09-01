@@ -62,6 +62,11 @@ def build_research_material(
         metadata["topics"] = list(analysis.topics)
         metadata["technologies"] = list(analysis.technologies)
         metadata["analysis_version"] = analysis.analyzer_version
+        metadata["analyzer"] = analysis.analyzer
+        if analysis.digest_units is not None:
+            metadata["digest_units"] = analysis.digest_units
+        if analysis.omitted_units is not None:
+            metadata["omitted_units"] = analysis.omitted_units
     return ResearchMaterial(
         material_id=material.material_id,
         material_type=decision.material_type,
@@ -90,9 +95,7 @@ def _lifted(units: tuple[ContentUnit, ...]) -> dict[str, object]:
     return found
 
 
-def _summary(
-    decision: ClassificationDecision, units: tuple[ContentUnit, ...]
-) -> str:
+def _summary(decision: ClassificationDecision, units: tuple[ContentUnit, ...]) -> str:
     unit_count = len(units)
     files = len({unit.location.path for unit in units if unit.location.path})
     if decision.material_type is MaterialType.DOCUMENT and decision.subtype == "pdf":

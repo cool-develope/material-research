@@ -58,6 +58,9 @@ def format_process_report(
             f"{label} {research.title}  {research.material_type.value}  "
             f"{count} {noun}  {research.summary}"
         )
+        keywords = _keywords_line(result.analysis.topics)
+        if keywords is not None:
+            lines.append(keywords)
         lines.extend(_location_lines(research.content_units))
         skipped = _skipped_line(research.metadata.get("skipped"))
         if skipped is not None:
@@ -82,6 +85,13 @@ def _location_lines(units: tuple[ContentUnit, ...]) -> list[str]:
     first = format_location(units[0].location)
     last = format_location(units[-1].location)
     return [f"    {first} … {last}"]
+
+
+def _keywords_line(topics: tuple[str, ...]) -> str | None:
+    names = [item.strip() for item in topics if item.strip()]
+    if not names:
+        return None
+    return f"    keywords: {', '.join(names[:12])}"
 
 
 def _skipped_line(value: object) -> str | None:

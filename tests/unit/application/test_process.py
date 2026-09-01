@@ -116,10 +116,18 @@ def test_process_python_project_produces_line_ranges(
     assert isinstance(skipped, list)
     assert "tests/test_main.py" in skipped
     assert "docs/guide.md" in skipped
-    assert all(
-        unit.metadata.get("strategy") == "code.file"
+    by_path = {
+        unit.location.path: unit.metadata.get("strategy")
         for unit in processed.research.content_units
+    }
+    assert by_path.get("src/api.py") == "code.symbol"
+    assert by_path.get("src/main.py") == "code.file"
+    api = next(
+        unit
+        for unit in processed.research.content_units
+        if unit.location.path == "src/api.py"
     )
+    assert api.location.section == "handle_request"
 
     latest = ClassificationRepository(session).get_latest(material.material_id)
     assert latest is not None

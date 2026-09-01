@@ -28,6 +28,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument(
+        "--material-type",
+        default=None,
+        help="Restrict search to a material type (document, project, dataset, …).",
+    )
+    parser.add_argument(
         "--postgres",
         action="store_true",
         help="Use DATABASE_URL and QDRANT_URL from the environment "
@@ -56,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     index = make_index_service(settings)
     with sessions() as session:
         citations = DeepResearchService(session, index).select(
-            args.query, limit=args.limit
+            args.query, limit=args.limit, material_type=args.material_type
         )
     return _print_citations(citations)
 

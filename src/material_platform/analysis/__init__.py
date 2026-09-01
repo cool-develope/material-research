@@ -1,11 +1,17 @@
 from material_platform.analysis.deterministic import (
     ANALYZER,
     ANALYZER_VERSION,
+    DeterministicAnalyzer,
     analyze_units,
 )
+from material_platform.analysis.factory import make_analyzer
+from material_platform.analysis.protocol import Analyzer
 
 __all__ = [
     "ANALYZER",
     "ANALYZER_VERSION",
+    "Analyzer",
+    "DeterministicAnalyzer",
     "analyze_units",
+    "make_analyzer",
 ]

@@ -126,3 +126,59 @@ def test_long_project_file_windows_keep_path_lines() -> None:
     assert all(unit.metadata["strategy"] == "code.file" for unit in mains)
     assert all(unit.location.line_start is not None for unit in mains)
     assert mains[0].location.line_start == 1
+
+
+def test_python_symbols_are_separate_units() -> None:
+    text = (
+        "import os\n"
+        "\n"
+        "@route\n"
+        "def alpha():\n"
+        "    return 1\n"
+        "\n"
+        "class Box:\n"
+        "    def method(self):\n"
+        "        return 2\n"
+        "\n"
+        "async def beta():\n"
+        "    return 3\n"
+    )
+    files = (
+        MaterialFile(path="pyproject.toml", data=b"[project]\nname='x'\n"),
+        MaterialFile(path="src/api.py", data=text.encode()),
+    )
+    units = extract_units(classify_files(tuple(item.path for item in files)), files)
+    api = [unit for unit in units if unit.location.path == "src/api.py"]
+    names = [unit.location.section for unit in api]
+    assert names == [None, "alpha", "Box", "beta"]
+    assert all(unit.metadata["strategy"] == "code.symbol" for unit in api)
+    alpha = next(unit for unit in api if unit.location.section == "alpha")
+    box = next(unit for unit in api if unit.location.section == "Box")
+    assert "@route" in alpha.content
+    assert "def method" in box.content
+    assert alpha.location.line_start == 3
+    assert "import os" in next(
+        unit for unit in api if unit.location.section is None
+    ).content
+
+
+def test_long_python_symbol_windows_keep_section() -> None:
+    body = "\n".join(f"    value_{index:03d} = {index}" for index in range(80))
+    text = f"def huge():\n{body}\n"
+    files = (
+        MaterialFile(path="pyproject.toml", data=b"[project]\nname='x'\n"),
+        MaterialFile(path="src/api.py", data=text.encode()),
+    )
+    units = extract_units(
+        classify_files(tuple(item.path for item in files)),
+        files,
+        chunk_tokens=20,
+        chunk_overlap=4,
+    )
+    api = [unit for unit in units if unit.location.path == "src/api.py"]
+    assert len(api) > 1
+    assert all(unit.location.section == "huge" for unit in api)
+    assert all(unit.metadata["strategy"] == "code.symbol" for unit in api)
+    assert api[0].location.line_start == 1
+    assert "value_000" in api[0].content
+    assert "value_079" in api[-1].content
