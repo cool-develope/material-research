@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from material_platform.agent.context import for_follow_up
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import (
     RAW_QUESTION_ID,
@@ -14,9 +15,7 @@ def cover_state(state: AgentState, *, tracer: Tracer) -> AgentState:
     with tracer.span("cover", select_calls=state.select_calls):
         material_count = len({item.material_id for item in state.evidence})
         for question in state.plan.questions:
-            rows = [
-                item for item in state.evidence if item.question_id == question.id
-            ]
+            rows = [item for item in state.evidence if item.question_id == question.id]
             current = state.questions[question.id]
             materials = tuple(dict.fromkeys(item.material_id for item in rows))
             evidence_ids = tuple(item.evidence_id for item in rows)
@@ -37,9 +36,7 @@ def cover_state(state: AgentState, *, tracer: Tracer) -> AgentState:
             {
                 "covered": covered,
                 "gaps": gaps,
-                "status": {
-                    qid: row.status for qid, row in state.questions.items()
-                },
+                "status": {qid: row.status for qid, row in state.questions.items()},
             }
         )
     return state
@@ -54,7 +51,7 @@ def follow_up_state(
     question = next(item for item in state.plan.questions if item.id == gap)
     extra = _follow_up_query(question.question, state)
     drafted = _llm_follow_up(
-        question.question, extra, named_llm(client, tracer, "follow_up")
+        question.question, extra, state, named_llm(client, tracer, "follow_up")
     )
     if drafted:
         extra = drafted
@@ -118,14 +115,17 @@ def _follow_up_query(question: str, state: AgentState) -> str:
 
 
 def _llm_follow_up(
-    question: str, draft: str, client: LlmClient | None
+    question: str,
+    draft: str,
+    state: AgentState,
+    client: LlmClient | None,
 ) -> str | None:
     if client is None:
         return None
     prompt = (
         "One short follow-up search query for this unanswered question. "
-        "JSON {\"query\": str}. Do not repeat the original question.\n\n"
-        f"Question: {question}\nDraft: {draft}"
+        'JSON {"query": str}. Do not repeat the original question.\n\n'
+        f"{for_follow_up(question, draft, state)}"
     )
     try:
         payload = client.complete_json(prompt)

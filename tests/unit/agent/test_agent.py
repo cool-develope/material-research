@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from material_platform.agent.models import MAX_SELECT_CALLS
+from material_platform.agent.models import MAX_SELECT_CALLS, ChatTurn
 from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import RecordingTracer
 from material_platform.domain.citation import Citation
@@ -168,6 +168,233 @@ def test_unknown_agent_mode_raises() -> None:
         ResearchAgent(lambda *args, **kwargs: (), mode="turbo")
 
 
+def test_ask_continues_thread() -> None:
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer())
+    agent.ask("handle_request")
+    thread = agent.last_thread_id
+    assert thread
+    agent.ask("where is it defined", thread_id=thread)
+    assert agent.last_state is not None
+    assert [turn.query for turn in agent.last_state.conversation] == ["handle_request"]
+    agent.ask("what else", thread_id=thread)
+    assert agent.last_state is not None
+    assert [turn.query for turn in agent.last_state.conversation] == [
+        "handle_request",
+        "where is it defined",
+    ]
+
+
+def test_ask_without_thread_id_starts_fresh() -> None:
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer())
+    agent.ask("handle_request")
+    agent.ask("where is it defined")
+    assert agent.last_state is not None
+    assert agent.last_state.conversation == []
+
+
+def test_planner_sees_compact_request_not_prior_report() -> None:
+    marker = "UNIQUE_REPORT_MARKER"
+    prompts: list[str] = []
+
+    class Planner:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            prompts.append(prompt)
+            return {
+                "objective": "research",
+                "questions": [{"id": "Q1", "question": "details"}],
+            }
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py", snippet=marker),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer(), client=Planner())
+    agent.ask("handle_request")
+    first = len(prompts)
+    agent.ask("where is it defined", thread_id=agent.last_thread_id)
+    later = prompts[first:]
+    plan_prompts = [item for item in later if "Split this research request" in item]
+    assert plan_prompts
+    assert "handle_request" in plan_prompts[0]
+    assert marker not in plan_prompts[0]
+    assert "# handle_request" not in plan_prompts[0]
+
+
+def test_continue_state_compacts_older_turns() -> None:
+    from material_platform.agent.compact import RECENT_TURNS
+    from material_platform.agent.models import (
+        ResearchPlan,
+        ResearchQuestion,
+        ResearchReport,
+        ResearchRequest,
+    )
+    from material_platform.agent.state import AgentState, continue_state
+
+    previous = AgentState(
+        query="latest",
+        plan=ResearchPlan(
+            objective="latest",
+            questions=(ResearchQuestion(id="Q0", question="latest"),),
+        ),
+        conversation=[ChatTurn(query=f"q{i}", answer=f"a{i}") for i in range(12)],
+        request=ResearchRequest(objective="latest"),
+        report=ResearchReport(
+            objective="latest",
+            sections=(),
+            summary="summary",
+            citations=(),
+            text="UNIQUE_REPORT_MARKER full body",
+        ),
+    )
+    nxt = continue_state(previous, "new")
+    assert nxt.query == "new"
+    assert nxt.evidence == []
+    assert nxt.select_calls == 0
+    assert len(nxt.conversation) == RECENT_TURNS
+    assert nxt.conversation[-1].query == "latest"
+    assert nxt.conversation[-1].answer == "summary"
+    assert "UNIQUE_REPORT_MARKER" not in nxt.conversation[-1].answer
+    assert nxt.summary is not None
+    assert "q0" in nxt.summary.text
+    assert nxt.request is not None
+    assert nxt.request.objective == "new"
+
+
+def test_sqlite_checkpointer_continues_thread(tmp_path) -> None:
+    from material_platform.config import Settings
+    from material_platform.infrastructure.langgraph_backends import make_checkpointer
+
+    settings = Settings(
+        _env_file=None,
+        database_url=f"sqlite:///{tmp_path / 'material.db'}",
+        workspace_root=tmp_path,
+    )
+    saver, _ref = make_checkpointer(settings)
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer(), checkpointer=saver)
+    agent.ask("handle_request")
+    agent.ask("where is it defined", thread_id=agent.last_thread_id)
+    assert agent.last_state is not None
+    assert [turn.query for turn in agent.last_state.conversation] == ["handle_request"]
+
+
+def test_extract_strips_snippets_from_persisted_evidence() -> None:
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py", snippet="secret body text"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer())
+    agent.ask("handle_request")
+    assert agent.last_state is not None
+    assert agent.last_state.evidence
+    assert all(item.citation.snippet == "" for item in agent.last_state.evidence)
+
+
+def test_extract_maps_pending_in_token_batches() -> None:
+    from material_platform.agent.extract import extract_pending
+    from material_platform.agent.models import ResearchPlan, ResearchQuestion
+    from material_platform.agent.state import AgentState
+
+    calls = {"n": 0}
+
+    class Mapper:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            calls["n"] += 1
+            return {"items": [{"index": 1, "finding": "claim", "stance": "supports"}]}
+
+    long = "x" * 5000
+    plan = ResearchPlan(
+        objective="q",
+        questions=(ResearchQuestion(id="Q0", question="q"),),
+    )
+    state = AgentState(query="q", plan=plan)
+    state.pending_question = "Q0"
+    state.pending = [
+        _hit("a.py", snippet=long),
+        _hit("b.py", snippet=long),
+    ]
+    state = extract_pending(state, tracer=RecordingTracer(), client=Mapper())
+    assert calls["n"] == 2
+    assert len(state.evidence) == 2
+    assert all(item.citation.snippet == "" for item in state.evidence)
+
+
+def test_store_recalls_compact_memories_on_reference() -> None:
+    from langgraph.store.memory import InMemoryStore
+
+    prompts: list[str] = []
+
+    class Planner:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            prompts.append(prompt)
+            return {
+                "objective": "research",
+                "questions": [{"id": "Q1", "question": "details"}],
+            }
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py"),)
+
+    store = InMemoryStore()
+    agent = ResearchAgent(
+        select, tracer=RecordingTracer(), client=Planner(), store=store
+    )
+    agent.ask("handle_request")
+    thread = agent.last_thread_id
+    saved = store.search((thread,), limit=10)
+    assert any(item.key == "request" for item in saved)
+    first = len(prompts)
+    agent.ask("as we said, where is auth", thread_id=thread)
+    plan_prompts = [
+        item for item in prompts[first:] if "Split this research request" in item
+    ]
+    assert plan_prompts
+    assert "Recalled memories:" in plan_prompts[0]
+
+
 def test_material_point_is_never_a_citation() -> None:
     bad = Citation(
         material_id=uuid4(),
@@ -231,7 +458,7 @@ def test_report_sections_follow_questions() -> None:
     assert not any(section.heading.startswith("M") for section in report.sections)
     from material_platform.agent.graph import run_agent
 
-    state = run_agent(
+    state, _thread = run_agent(
         "Compare authentication",
         select,
         tracer=RecordingTracer(),
@@ -331,6 +558,46 @@ def test_contradiction_is_kept_in_report() -> None:
     assert state.findings[0].contradicting_evidence
     assert "Unresolved disagreement" in (state.report.text if state.report else "")
     assert any(event.attrs.get("contradictions") == 1 for event in tracer.events)
+
+
+def test_findings_dedup_equivalent_claims() -> None:
+    from material_platform.agent.findings import build_findings
+    from material_platform.agent.models import (
+        EvidenceItem,
+        QuestionState,
+        ResearchPlan,
+        ResearchQuestion,
+    )
+    from material_platform.agent.state import AgentState
+
+    first = _hit("src/api.py", snippet="oauth")
+    second = _hit("src/auth.py", snippet="oauth")
+    plan = ResearchPlan(
+        objective="auth",
+        questions=(ResearchQuestion(id="Q0", question="auth"),),
+    )
+    state = AgentState(query="auth", plan=plan)
+    state.questions = {"Q0": QuestionState(question_id="Q0")}
+    state.evidence = [
+        EvidenceItem(
+            evidence_id="E1",
+            question_id="Q0",
+            material_id=first.material_id,
+            finding="Access tokens expire after 15 minutes",
+            citation=first,
+        ),
+        EvidenceItem(
+            evidence_id="E2",
+            question_id="Q0",
+            material_id=second.material_id,
+            finding="access tokens expire after 15 minutes",
+            citation=second,
+        ),
+    ]
+    state = build_findings(state, tracer=RecordingTracer())
+    assert len(state.findings) == 1
+    assert state.findings[0].claim.count("15 minutes") == 1
+    assert state.findings[0].supporting_evidence == ("E1", "E2")
 
 
 def test_graph_is_compiled_langgraph() -> None:

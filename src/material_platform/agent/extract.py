@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from material_platform.agent.context import for_extract, map_batches, strip_snippet
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import EvidenceItem
 from material_platform.agent.state import AgentState
@@ -17,39 +18,57 @@ def extract_pending(
     if not state.pending:
         return state
     question_id = state.pending_question
+    question = next(
+        (item.question for item in state.plan.questions if item.id == question_id),
+        state.query,
+    )
     with tracer.span("extract", question_id=question_id, hits=len(state.pending)):
-        items = _llm_items(
-            question_id, state.pending, named_llm(client, tracer, "extract")
-        )
-        if items is None:
-            items = tuple(
-                _from_citation(question_id, hit, index)
-                for index, hit in enumerate(state.pending, start=1)
-            )
-        existing = [
-            item for item in state.evidence if item.question_id == question_id
-        ]
+        batches = map_batches(state.pending)
+        extracted: list[EvidenceItem] = []
+        offset = 1
+        llm = named_llm(client, tracer, "extract")
+        for batch in batches:
+            items = _llm_items(question_id, question, batch, llm, offset=offset)
+            if items is None:
+                items = tuple(
+                    _from_citation(question_id, hit, offset + index)
+                    for index, hit in enumerate(batch)
+                )
+            extracted.extend(items)
+            offset += len(batch)
+        existing = [item for item in state.evidence if item.question_id == question_id]
         room = state.budgets.evidence_per_question - len(existing)
         global_room = state.budgets.evidence_total - len(state.evidence)
-        take = min(room, global_room, len(items))
-        state.evidence.extend(items[:take])
+        take = min(room, global_room, len(extracted))
+        kept = [_persist(item) for item in extracted[:take]]
+        state.evidence.extend(kept)
         state.pending = []
-        tracer.event("extract", question_id=question_id, added=take)
+        tracer.event(
+            "extract",
+            question_id=question_id,
+            added=take,
+            batches=len(batches),
+        )
         tracer.set_output(
             {
                 "question_id": question_id,
                 "added": take,
+                "batches": len(batches),
                 "findings": [
                     {
                         "finding": clip(item.finding),
                         "stance": item.stance,
                         "citation": item.citation.citation,
                     }
-                    for item in items[:take]
+                    for item in kept
                 ],
             }
         )
     return state
+
+
+def _persist(item: EvidenceItem) -> EvidenceItem:
+    return item.model_copy(update={"citation": strip_snippet(item.citation)})
 
 
 def _from_citation(question_id: str, hit: Citation, index: int) -> EvidenceItem:
@@ -65,19 +84,20 @@ def _from_citation(question_id: str, hit: Citation, index: int) -> EvidenceItem:
 
 def _llm_items(
     question_id: str,
+    question: str,
     hits: list[Citation],
     client: LlmClient | None,
+    *,
+    offset: int,
 ) -> tuple[EvidenceItem, ...] | None:
     if client is None:
         return None
-    lines = []
-    for index, hit in enumerate(hits, start=1):
-        lines.append(f"{index}. {hit.citation} :: {hit.snippet}")
     prompt = (
-        "Extract evidence JSON {\"items\": [{\"index\": int, \"finding\": str, "
-        "\"stance\": \"supports|contradicts|neutral\"}]}. "
+        "Extract evidence JSON "
+        '{"items": [{"index": int, "finding": str, '
+        '"stance": "supports|contradicts|neutral"}]}. '
         "index refers to the numbered citations. Do not invent locators.\n\n"
-        + "\n".join(lines)
+        + for_extract(question, hits)
     )
     try:
         payload = client.complete_json(prompt)
@@ -102,7 +122,7 @@ def _llm_items(
         hit = hits[index - 1]
         items.append(
             EvidenceItem(
-                evidence_id=f"{question_id}-E{index}-{hit.citation}",
+                evidence_id=f"{question_id}-E{offset + index - 1}-{hit.citation}",
                 question_id=question_id,
                 material_id=hit.material_id,
                 finding=finding.strip() or hit.snippet,

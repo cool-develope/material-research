@@ -80,6 +80,8 @@ uv run mp chat "handle_request" \
   --data-dir /tmp/mp-simple --trace
 uv run mp chat "handle_request" \
   --data-dir /tmp/mp-simple --mode quick
+uv run mp chat "where is it defined" \
+  --data-dir /tmp/mp-simple --thread-id THREAD
 uv run mp eval --data-dir /tmp/mp-simple --lexical-only
 uv run mp eval \
   --source tests/fixtures/eval_long/research.zip \
@@ -95,7 +97,15 @@ HTTP wraps the same Runtime (ingest stays a local path):
 uv run mp serve --data-dir /tmp/mp-simple
 ```
 
-`POST /search` `{query, page?, page_size?, material_type?}` returns ranked **materials** (hop-1 only, default 10 per page, max 20) and a Langfuse `trace_url` when keys are set. `POST /chat` `{query, mode?}` runs the Deep Research agent (`quick` | `standard` | `deep`) and returns a cited report (hop 1/2 stay 5/20). `GET /health` is liveness only. `--postgres` uses `DATABASE_URL` and Qdrant. Chat uses `LLM_BASE_URL` when set.
+UI (Vite + React) proxies to that server:
+
+```bash
+cd web && npm install && npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Search is hop-1 material cards. Deep Research keeps `thread_id` in the URL and loads the full transcript from `GET /chat/{thread_id}`.
+
+`POST /search` `{query, page?, page_size?, material_type?}` returns ranked **materials** (hop-1 only, default 10 per page, max 20) and a Langfuse `trace_url` when keys are set. `POST /chat` `{query, mode?, thread_id?}` runs the Deep Research agent (`quick` | `standard` | `deep`) and returns a cited report plus `thread_id` (hop 1/2 stay 5/20). Pass `thread_id` back to continue the same chat. `GET /chat/{thread_id}` returns the full transcript from Postgres (`DATABASE_URL`, or sqlite under `--data-dir`). The agent still plans from a compact working set, not this transcript. Checkpoints go to sqlite under `--data-dir` (`langgraph.sqlite`) or Postgres database `langgraph` with `--postgres`. `GET /health` is liveness only. `--postgres` uses `DATABASE_URL` and Qdrant. Chat uses `LLM_BASE_URL` when set. CORS allows the Vite origin (`CORS_ORIGINS`).
 
 That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
 
@@ -216,7 +226,7 @@ uv run alembic upgrade head
 
 Langfuse reuses the same Postgres (`langfuse` database) and MinIO (`langfuse` bucket). UI: [http://localhost:3100](http://localhost:3100) (Dagster stays on 3000). Login `langfuse@example.com` / `langfuselocal`. Copy `.env.example` keys (`pk-lf-local` / `sk-lf-local`) so the agent ships traces.
 
-LangGraph reuses the same Postgres (`langgraph` database) for checkpoints and the same Qdrant (`langgraph` collection, hybrid dense+sparse 1024) for the agent store. `docker compose up` creates both. Checkpoint tables are created by `PostgresSaver.setup()` when the agent checkpointer is wired.
+LangGraph reuses the same Postgres (`langgraph` database) for chat checkpoints and the same Qdrant (`langgraph` collection, hybrid dense+sparse 1024) for a later agent store. `docker compose up` creates both. Local sqlite uses `langgraph.sqlite` under `--data-dir`. Checkpoint tables are created when Runtime first opens the checkpointer.
 
 Production-like path (Postgres, MinIO, Qdrant, BGE-M3, reranker, LLM analysis + agent, Langfuse). Needs compose up, Ollama (or `LLM_BASE_URL`), FlagEmbedding, and `scripts/download_bge.py`:
 

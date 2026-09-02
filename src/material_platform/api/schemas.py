@@ -60,6 +60,7 @@ class SearchResponse(BaseModel):
 class ChatRequest(BaseModel):
     query: str = Field(min_length=1)
     mode: AgentMode | None = None
+    thread_id: str | None = None
 
     @field_validator("query")
     @classmethod
@@ -69,6 +70,13 @@ class ChatRequest(BaseModel):
             raise ValueError("query is required")
         return text
 
+    @field_validator("thread_id")
+    @classmethod
+    def _thread_id(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return value.strip()
+
 
 class ChatResponse(BaseModel):
     objective: str
@@ -77,7 +85,22 @@ class ChatResponse(BaseModel):
     sections: list[ReportSection]
     citations: list[Citation]
     mode: str
+    thread_id: str
     trace_url: str | None = None
+
+
+class ChatHistoryMessage(BaseModel):
+    role: str
+    content: str
+    summary: str | None = None
+    created_at: str
+    ordinal: int
+
+
+class ChatHistoryResponse(BaseModel):
+    thread_id: str
+    mode: str | None = None
+    messages: list[ChatHistoryMessage]
 
 
 class HealthResponse(BaseModel):

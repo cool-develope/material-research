@@ -7,6 +7,8 @@ from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import Tracer, make_tracer
 from material_platform.analysis import make_llm_client
 from material_platform.api.schemas import (
+    ChatHistoryMessage,
+    ChatHistoryResponse,
     ChatRequest,
     ChatResponse,
     HealthResponse,
@@ -14,6 +16,7 @@ from material_platform.api.schemas import (
     SearchRequest,
     SearchResponse,
 )
+from material_platform.application.chat_history import ChatHistoryService
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
@@ -80,23 +83,61 @@ def chat(request: Request, body: ChatRequest) -> ChatResponse:
     runtime = _runtime_of(request)
     settings = runtime.settings
     mode = body.mode or settings.agent_mode
-    tracer = _tracer_of(settings, body.query[:80])
+    tracer = _tracer_of(settings, body.thread_id or body.query[:80])
     client = None
     if settings.llm_base_url:
         client = make_llm_client(settings)
     try:
         with runtime.session() as session:
-            report = ResearchAgent(
+            agent = ResearchAgent(
                 DeepResearchService(session, runtime.index).select,
                 tracer=tracer,
                 client=client,
                 mode=mode,
-            ).ask(body.query)
+                checkpointer=runtime.checkpointer,
+                store=runtime.memory_store,
+            )
+            report = agent.ask(body.query, thread_id=body.thread_id)
+            thread_id = agent.last_thread_id
+            ChatHistoryService(session).record_turn(
+                thread_id,
+                query=body.query,
+                report=report,
+                mode=mode,
+            )
+        return _chat_response(
+            report,
+            mode=mode,
+            thread_id=thread_id,
+            trace_url=tracer.trace_url(),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
         tracer.flush()
-    return _chat_response(report, mode=mode, trace_url=tracer.trace_url())
+
+
+@router.get("/chat/{thread_id}", response_model=ChatHistoryResponse)
+def chat_history(request: Request, thread_id: str) -> ChatHistoryResponse:
+    runtime = _runtime_of(request)
+    with runtime.session() as session:
+        thread = ChatHistoryService(session).get(thread_id.strip())
+    if thread is None:
+        raise HTTPException(status_code=404, detail="thread not found")
+    return ChatHistoryResponse(
+        thread_id=thread.thread_id,
+        mode=thread.mode,
+        messages=[
+            ChatHistoryMessage(
+                role=item.role,
+                content=item.content,
+                summary=item.summary,
+                created_at=item.created_at.isoformat(),
+                ordinal=item.ordinal,
+            )
+            for item in thread.messages
+        ],
+    )
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -105,7 +146,11 @@ def health() -> HealthResponse:
 
 
 def _chat_response(
-    report: ResearchReport, *, mode: str, trace_url: str | None
+    report: ResearchReport,
+    *,
+    mode: str,
+    thread_id: str,
+    trace_url: str | None,
 ) -> ChatResponse:
     return ChatResponse(
         objective=report.objective,
@@ -114,5 +159,6 @@ def _chat_response(
         sections=list(report.sections),
         citations=list(report.citations),
         mode=mode,
+        thread_id=thread_id,
         trace_url=trace_url,
     )

@@ -21,3 +21,7 @@ htmlcov/
 /tests/fixtures/eval_aiml/cache/
 /tests/fixtures/eval_aiml/research.zip
 /tests/fixtures/eval_aiml/eval_aiml.json
+
+# Vite UI
+web/node_modules/
+web/dist/

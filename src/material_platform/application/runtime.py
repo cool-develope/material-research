@@ -42,12 +42,40 @@ class Runtime:
         self.sessions: sessionmaker[Session] = make_session_factory(self.engine)
         self.workspace = TemporaryWorkspace(data_dir)
         self._index: IndexService | None = None
+        self._checkpointer: object | None = None
+        self._checkpoint_ref: object | None = None
+        self._memory_store: object | None = None
+        self._memory_store_ref: object | None = None
 
     @property
     def index(self) -> IndexService:
         if self._index is None:
             self._index = make_index_service(self.settings)
         return self._index
+
+    @property
+    def checkpointer(self) -> object:
+        if self._checkpointer is None:
+            from material_platform.infrastructure.langgraph_backends import (
+                make_checkpointer,
+            )
+
+            saver, ref = make_checkpointer(self.settings)
+            self._checkpointer = saver
+            self._checkpoint_ref = ref
+        return self._checkpointer
+
+    @property
+    def memory_store(self) -> object:
+        if self._memory_store is None:
+            from material_platform.infrastructure.langgraph_backends import (
+                make_store,
+            )
+
+            store, ref = make_store(self.settings)
+            self._memory_store = store
+            self._memory_store_ref = ref
+        return self._memory_store
 
     @contextmanager
     def session(self) -> Iterator[Session]:

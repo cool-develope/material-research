@@ -36,6 +36,7 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.langfuse_host.startswith("https://")
     assert settings.langgraph_database_url.endswith("/langgraph")
     assert settings.langgraph_qdrant_collection == "langgraph"
+    assert "localhost:5173" in settings.cors_origins
 
 
 def test_pytest_ignores_dotenv() -> None:

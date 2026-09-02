@@ -294,3 +294,55 @@ class MaterialArtifactRow(Base):
     )
 
     material: Mapped[MaterialRow] = relationship(back_populates="artifacts")
+
+
+class ChatThreadRow(Base):
+    __tablename__ = "chat_threads"
+
+    thread_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    messages: Mapped[list[ChatMessageRow]] = relationship(
+        back_populates="thread",
+        order_by="ChatMessageRow.ordinal",
+    )
+
+
+class ChatMessageRow(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "thread_id",
+            "ordinal",
+            name="uq_chat_messages_thread_ordinal",
+        ),
+    )
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+    )
+    thread_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("chat_threads.thread_id"),
+        nullable=False,
+        index=True,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    thread: Mapped[ChatThreadRow] = relationship(back_populates="messages")

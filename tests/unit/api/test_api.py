@@ -18,9 +18,14 @@ def _client(tmp_path: Path) -> TestClient:
 def test_health_ok(tmp_path: Path) -> None:
     settings = sqlite_settings(Settings(_env_file=None), tmp_path / "data")
     with TestClient(create_app(runtime=Runtime(settings))) as client:
-        response = client.get("/health")
+        response = client.get(
+            "/health", headers={"Origin": "http://localhost:5173"}
+        )
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+    assert response.headers.get("access-control-allow-origin") == (
+        "http://localhost:5173"
+    )
 
 
 def test_search_returns_materials(tmp_path: Path) -> None:
@@ -103,3 +108,53 @@ def test_chat_returns_cited_report(tmp_path: Path) -> None:
     assert body["text"]
     assert body["citations"]
     assert any("src/api.py" in item["citation"] for item in body["citations"])
+    assert body["thread_id"]
+
+
+def test_chat_continues_thread(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        first = client.post("/chat", json={"query": "handle_request", "mode": "quick"})
+        thread_id = first.json()["thread_id"]
+        second = client.post(
+            "/chat",
+            json={
+                "query": "where is it defined",
+                "mode": "quick",
+                "thread_id": thread_id,
+            },
+        )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["thread_id"] == thread_id
+    assert second.json()["text"]
+
+
+def test_chat_history_returns_full_transcript(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        first = client.post("/chat", json={"query": "handle_request", "mode": "quick"})
+        thread_id = first.json()["thread_id"]
+        client.post(
+            "/chat",
+            json={
+                "query": "where is it defined",
+                "mode": "quick",
+                "thread_id": thread_id,
+            },
+        )
+        history = client.get(f"/chat/{thread_id}")
+        missing = client.get("/chat/does-not-exist")
+    assert first.status_code == 200
+    assert history.status_code == 200
+    body = history.json()
+    assert body["thread_id"] == thread_id
+    messages = body["messages"]
+    assert [item["role"] for item in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert messages[0]["content"] == "handle_request"
+    assert messages[2]["content"] == "where is it defined"
+    assert first.json()["text"] in messages[1]["content"]
+    assert missing.status_code == 404

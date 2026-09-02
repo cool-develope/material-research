@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from material_platform.agent.context import for_summary, for_write_section
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import ReportSection, ResearchReport
 from material_platform.agent.state import AgentState
@@ -16,6 +17,11 @@ def write_report(
 ) -> AgentState:
     with tracer.span("write", findings=len(state.findings)):
         by_id = {item.evidence_id: item for item in state.evidence}
+        objective = (
+            state.request.objective
+            if state.request is not None
+            else state.plan.objective
+        )
         sections: list[ReportSection] = []
         citations: list[Citation] = []
         for question in state.plan.questions:
@@ -25,7 +31,10 @@ def write_report(
             )
             body = _section_body(finding, by_id)
             drafted = _llm_section(
-                question.question, body, named_llm(client, tracer, "write")
+                objective,
+                question.question,
+                body,
+                named_llm(client, tracer, "write"),
             )
             if drafted:
                 body = drafted
@@ -45,11 +54,13 @@ def write_report(
                 )
             )
         summary = _summary(
-            state.plan.objective, sections, named_llm(client, tracer, "summary")
+            objective,
+            sections,
+            named_llm(client, tracer, "summary"),
         )
-        text = _render(state.plan.objective, sections, summary)
+        text = _render(objective, sections, summary)
         state.report = ResearchReport(
-            objective=state.plan.objective,
+            objective=objective,
             sections=tuple(sections),
             summary=summary,
             citations=tuple(_dedupe(citations)),
@@ -98,13 +109,8 @@ def _summary(
     )
     if client is None:
         return fallback
-    prompt = (
-        "Write a 2-sentence executive summary last, after these sections. "
-        "JSON {\"summary\": str}. Do not add citations that are not listed.\n\n"
-        + "\n\n".join(f"## {item.heading}\n{item.body}" for item in sections)
-    )
     try:
-        payload = client.complete_json(prompt)
+        payload = client.complete_json(for_summary(objective, sections))
     except Exception:
         return fallback
     text = payload.get("summary")
@@ -114,17 +120,12 @@ def _summary(
 
 
 def _llm_section(
-    heading: str, body: str, client: LlmClient | None
+    objective: str, heading: str, body: str, client: LlmClient | None
 ) -> str | None:
     if client is None:
         return None
-    prompt = (
-        "Rewrite this section in 1-3 sentences. Keep every citation string "
-        "unchanged. JSON {\"body\": str}.\n\n"
-        f"Heading: {heading}\n{body}"
-    )
     try:
-        payload = client.complete_json(prompt)
+        payload = client.complete_json(for_write_section(objective, heading, body))
     except Exception:
         return None
     text = payload.get("body")

@@ -64,3 +64,18 @@ def test_ensure_checkpoint_runs_setup(monkeypatch) -> None:
     monkeypatch.setattr(postgres, "PostgresSaver", PostgresSaver)
     ensure_checkpoint("postgresql+psycopg://material:material@localhost:5432/langgraph")
     assert calls == ["setup"]
+
+
+def test_make_store_sqlite_roundtrip(tmp_path: Path) -> None:
+    from material_platform.infrastructure.langgraph_backends import make_store
+
+    settings = Settings(
+        _env_file=None,
+        database_url=f"sqlite:///{tmp_path / 'material.db'}",
+        workspace_root=tmp_path,
+    )
+    store, _ref = make_store(settings)
+    store.put(("thread-1",), "request", {"kind": "request", "text": "auth"})
+    found = store.get(("thread-1",), "request")
+    assert found is not None
+    assert found.value["text"] == "auth"

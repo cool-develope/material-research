@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from material_platform.agent.context import for_plan
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import (
     RAW_QUESTION_ID,
     QuestionState,
     ResearchPlan,
     ResearchQuestion,
+    ResearchRequest,
 )
 from material_platform.agent.state import AgentState
 from material_platform.agent.trace import Tracer
@@ -19,28 +21,29 @@ def plan_state(
     client: LlmClient | None = None,
 ) -> AgentState:
     with tracer.span("plan", query=state.query):
+        working = for_plan(state)
+        objective = (
+            state.request.objective if state.request is not None else state.query
+        )
         plan = _llm_plan(
-            state.query,
+            objective,
             named_llm(client, tracer, "plan"),
             limit=state.budgets.plan_questions,
+            working=working,
         )
         if plan is None:
             plan = ResearchPlan(
-                objective=state.query,
-                questions=(
-                    ResearchQuestion(id=RAW_QUESTION_ID, question=state.query),
-                ),
+                objective=objective,
+                questions=(ResearchQuestion(id=RAW_QUESTION_ID, question=state.query),),
             )
-        plan = _ensure_raw(
-            state.query, plan, limit=state.budgets.plan_questions
-        )
+        plan = _ensure_raw(state.query, plan, limit=state.budgets.plan_questions)
+        if state.request is None:
+            state.request = ResearchRequest(objective=plan.objective)
         state.plan = plan
         state.questions = {
             item.id: QuestionState(question_id=item.id) for item in plan.questions
         }
-        queued: list[tuple[str, str, bool]] = [
-            (RAW_QUESTION_ID, state.query, False)
-        ]
+        queued: list[tuple[str, str, bool]] = [(RAW_QUESTION_ID, state.query, False)]
         for item in plan.questions:
             if item.id == RAW_QUESTION_ID:
                 continue
@@ -59,14 +62,10 @@ def plan_state(
     return state
 
 
-def _ensure_raw(
-    query: str, plan: ResearchPlan, *, limit: int
-) -> ResearchPlan:
+def _ensure_raw(query: str, plan: ResearchPlan, *, limit: int) -> ResearchPlan:
     questions = list(plan.questions[:limit])
     if not questions or questions[0].id != RAW_QUESTION_ID:
-        questions.insert(
-            0, ResearchQuestion(id=RAW_QUESTION_ID, question=query)
-        )
+        questions.insert(0, ResearchQuestion(id=RAW_QUESTION_ID, question=query))
     else:
         questions[0] = ResearchQuestion(id=RAW_QUESTION_ID, question=query)
     seen: set[str] = set()
@@ -84,15 +83,23 @@ def _ensure_raw(
 
 
 def _llm_plan(
-    query: str, client: LlmClient | None, *, limit: int
+    query: str,
+    client: LlmClient | None,
+    *,
+    limit: int,
+    working: str = "",
 ) -> ResearchPlan | None:
     if client is None:
         return None
+    prior = f"\n\n{working}\n" if working else ""
     prompt = (
         f"Split this research request into at most {limit} concrete questions. "
-        "Reply JSON: {\"objective\": str, \"questions\": "
-        "[{\"id\": \"Q1\", \"question\": str, \"priority\": \"required\", "
-        "\"comparative\": bool}]}\n\n"
+        'Reply JSON: {"objective": str, "questions": '
+        '[{"id": "Q1", "question": str, "priority": "required", '
+        '"comparative": bool}]}\n'
+        "Use the compact request and recent turns as context; questions must "
+        "answer the latest request.\n"
+        f"{prior}"
         f"Request:\n{query}"
     )
     try:

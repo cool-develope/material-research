@@ -7,6 +7,7 @@ from pathlib import Path
 from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import make_tracer, recorded
 from material_platform.analysis import make_llm_client
+from material_platform.application.chat_history import ChatHistoryService
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import sqlite_settings
 from material_platform.application.runtime import Runtime
@@ -37,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Agent budget: quick=3 selects, standard=8, deep=16. Hop 1/2 stay 5/20.",
     )
+    parser.add_argument(
+        "--thread-id",
+        default=None,
+        help="Continue a previous chat. Omit to start a new thread.",
+    )
     args = parser.parse_args(argv)
     settings = Settings()
     if not args.postgres:
@@ -52,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         secret_key=settings.langfuse_secret_key,
         host=settings.langfuse_host,
         recording=args.trace,
-        session_id=args.query[:80],
+        session_id=args.thread_id or args.query[:80],
     )
     client = None
     if args.llm:
@@ -68,9 +74,18 @@ def main(argv: list[str] | None = None) -> int:
             tracer=tracer,
             client=client,
             mode=args.mode or settings.agent_mode,
+            checkpointer=runtime.checkpointer,
+            store=runtime.memory_store,
         )
-        report = agent.ask(args.query)
+        report = agent.ask(args.query, thread_id=args.thread_id)
+        ChatHistoryService(session).record_turn(
+            agent.last_thread_id,
+            query=args.query,
+            report=report,
+            mode=args.mode or settings.agent_mode,
+        )
     sys.stdout.write(report.text)
+    print(f"thread: {agent.last_thread_id}", file=sys.stderr)
     log = recorded(tracer)
     if args.trace and log is not None:
         print("--- spans ---", file=sys.stderr)

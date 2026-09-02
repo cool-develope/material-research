@@ -61,6 +61,21 @@ class SearchAttempt(Contract):
     follow_up: bool = False
 
 
+class ChatTurn(Contract):
+    query: str
+    answer: str
+
+
+class ResearchRequest(Contract):
+    objective: str
+    constraints: tuple[str, ...] = ()
+    emphasis: str = ""
+
+
+class ConversationSummary(Contract):
+    text: str
+
+
 class ReportSection(Contract):
     question_id: str
     heading: str

@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from material_platform.api.routes import router
 from material_platform.application.runtime import Runtime
@@ -17,6 +18,7 @@ def create_app(
 ) -> FastAPI:
     bound = runtime
     configured = settings
+    resolved = configured or (bound.settings if bound is not None else Settings())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -24,5 +26,14 @@ def create_app(
         yield
 
     app = FastAPI(title="Material Platform", lifespan=lifespan)
+    origins = [
+        item.strip() for item in resolved.cors_origins.split(",") if item.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(router)
     return app
