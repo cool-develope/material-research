@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from material_platform.application.prod import (
+from material_platform.eval.prod import (
     E2E_COLLECTION,
     REPO,
     apply_prod_knobs,
@@ -59,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
         _run(
             [
                 py,
-                str(REPO / "scripts/ingest_local.py"),
+                "-m",
+                "material_platform",
+                "ingest",
                 str(args.source.resolve()),
                 "--postgres",
                 "--process",
@@ -71,10 +73,12 @@ def main(argv: list[str] | None = None) -> int:
         _run(
             [
                 py,
-                str(REPO / "scripts/research_query.py"),
+                "-m",
+                "material_platform",
+                "search",
                 args.query,
                 "--postgres",
-                "--limit",
+                "--page-size",
                 "5",
             ],
             env,
@@ -82,7 +86,9 @@ def main(argv: list[str] | None = None) -> int:
     _run(
         [
             py,
-            str(REPO / "scripts/research_agent.py"),
+            "-m",
+            "material_platform",
+            "chat",
             args.query,
             "--postgres",
             "--llm",

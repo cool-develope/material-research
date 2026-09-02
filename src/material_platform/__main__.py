@@ -1,4 +1,4 @@
-from material_platform.application.query import main
+from material_platform.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

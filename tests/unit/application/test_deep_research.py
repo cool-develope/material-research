@@ -67,6 +67,46 @@ def test_deep_research_cites_pdf_page_and_api_lines(
     assert all("__material__" not in hit.citation for hit in lines)
 
 
+def test_search_lists_materials_without_unit_locators(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    _ingest_and_process(session, tmp_path, index)
+    page = DeepResearchService(session, index).search(
+        "handle_request", offset=0, limit=10
+    )
+    assert page.results
+    assert all(hit.root_path for hit in page.results)
+    assert all(hit.material_type for hit in page.results)
+    first = DeepResearchService(session, index).search(
+        "handle_request", offset=0, limit=1
+    )
+    second = DeepResearchService(session, index).search(
+        "handle_request", offset=1, limit=1
+    )
+    assert first.has_more
+    assert first.results[0].material_id != second.results[0].material_id
+
+
+def test_search_traces_embed_and_hop1(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    _ingest_and_process(session, tmp_path, index)
+    tracer = RecordingTracer()
+    page = DeepResearchService(session, index).search(
+        "handle_request", offset=0, limit=10, tracer=tracer
+    )
+    assert page.results
+    names = [span.name for span in tracer.spans]
+    assert names == ["search", "embed", "hop1"]
+    hop1 = next(span for span in tracer.spans if span.name == "hop1")
+    assert hop1.attrs["level"] == "material"
+    assert "hop2" not in names
+
+
 def test_select_traces_hop1_hop2_rerank(
     session: Session,
     tmp_path: Path,

@@ -10,17 +10,6 @@ from material_platform.agent.trace import make_tracer
 from material_platform.analysis import make_llm_client
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import ingest_and_process, sqlite_settings
-from material_platform.application.prod import (
-    AIML_COLLECTION,
-    ARCHIVE_TIMEOUT,
-    EXTRACT_BYTES,
-    REPO,
-    apply_prod_knobs,
-    migrate_head,
-    preflight_prod,
-    prod_env,
-    wipe_index,
-)
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
 from material_platform.eval import (
@@ -44,6 +33,17 @@ from material_platform.eval.aiml_corpus import (
 from material_platform.eval.aiml_fetch import build_aiml_zip
 from material_platform.eval.cases import EvalSuite
 from material_platform.eval.experiment import score_settings
+from material_platform.eval.prod import (
+    AIML_COLLECTION,
+    ARCHIVE_TIMEOUT,
+    EXTRACT_BYTES,
+    REPO,
+    apply_prod_knobs,
+    migrate_head,
+    preflight_prod,
+    prod_env,
+    wipe_index,
+)
 
 _REQUIRED_AGENT = frozenset({"agent-qlora"})
 _LOCAL_DATA = Path("/tmp/mp-aiml")
@@ -52,8 +52,9 @@ _PROD_DATA = Path("/tmp/mp-aiml-prod")
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
+        prog="mp eval-aiml",
         description="Download public AI/ML sources into a local zip, then "
-        "ingest and score discovery / retrieval / agent citations."
+        "ingest and score discovery / retrieval / agent citations.",
     )
     parser.add_argument(
         "--build-only",

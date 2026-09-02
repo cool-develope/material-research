@@ -15,7 +15,8 @@ from material_platform.config import Settings
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Deep Research: plan questions, retrieve, write a cited report."
+        prog="mp chat",
+        description="Deep Research: plan questions, retrieve, write a cited report.",
     )
     parser.add_argument("query")
     parser.add_argument("--data-dir", type=Path, default=None)

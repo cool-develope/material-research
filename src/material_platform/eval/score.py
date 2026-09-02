@@ -49,23 +49,16 @@ def matches(citation: Citation, expected: ExpectedHit) -> bool:
         return False
     if expected.lines and citation.location.line_start is None:
         return False
-    if (
-        expected.section is not None
-        and citation.location.section != expected.section
-    ):
+    if expected.section is not None and citation.location.section != expected.section:
         return False
     return True
 
 
 def score_case(case: EvalCase, select: SelectFn) -> CaseScore:
-    citations = select(
-        case.query, limit=case.k, material_type=case.material_type
-    )
+    citations = select(case.query, limit=case.k, material_type=case.material_type)
     top = citations[: case.k]
     found = sum(
-        1
-        for expected in case.expect
-        if any(matches(hit, expected) for hit in top)
+        1 for expected in case.expect if any(matches(hit, expected) for hit in top)
     )
     rank = 0
     for index, hit in enumerate(top, start=1):
@@ -108,9 +101,7 @@ def hit_at_1(score: SuiteScore, mode: Mode) -> tuple[int, int]:
 
 def lexical_failed(score: SuiteScore) -> tuple[CaseScore, ...]:
     return tuple(
-        item
-        for item in score.cases
-        if item.mode == LEXICAL and not item.hit_at_1
+        item for item in score.cases if item.mode == LEXICAL and not item.hit_at_1
     )
 
 

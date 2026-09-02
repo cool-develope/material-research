@@ -1,4 +1,4 @@
-from material_platform.application.research_agent import main
+from material_platform.cli.chat import main
 
 
 def test_research_agent_cli_missing_db(tmp_path, capsys) -> None:

@@ -1,4 +1,4 @@
-"""Compose production knobs shared by e2e_research and eval_aiml --prod.
+"""Compose production knobs shared by e2e_research and mp eval-aiml --prod.
 
 Postgres, MinIO, Qdrant, and Langfuse come from docker compose. `.env`
 supplies URLs, Langfuse keys, and LLM_BASE_URL. EMBEDDER / RERANKER /

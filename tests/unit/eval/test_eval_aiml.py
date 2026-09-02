@@ -7,9 +7,9 @@ import pytest
 from docx import Document
 from tests.unit.discovery.trees import EVAL_AIML_ZIP
 
-from material_platform.application.aiml_eval import _eval_settings
 from material_platform.application.local import ingest_and_process
 from material_platform.eval import AIML_SUITE, LEXICAL, load_suite
+from material_platform.eval.aiml import _eval_settings
 from material_platform.eval.aiml_checks import discovery_errors, ingest_errors
 from material_platform.eval.aiml_corpus import (
     AIML_ZIP,
@@ -99,10 +99,10 @@ def test_eval_aiml_settings_ignore_dotenv_knobs(tmp_path: Path) -> None:
 def test_eval_aiml_prod_preflight_exits_before_ingest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from material_platform.application.aiml_eval import main
+    from material_platform.eval.aiml import main
 
     monkeypatch.setattr(
-        "material_platform.application.aiml_eval.preflight_prod",
+        "material_platform.eval.aiml.preflight_prod",
         lambda *args, **kwargs: ["postgres is not on 127.0.0.1:5432"],
     )
     assert main(["--prod", "--skip-build", "--skip-ingest"]) == 1

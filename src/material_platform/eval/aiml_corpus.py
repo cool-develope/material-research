@@ -65,7 +65,7 @@ class RemoteFile:
     fallbacks: tuple[str, ...] = ()
 
 
-# Public AI/ML sources. Ingest never hits the network; scripts/eval_aiml.py
+# Public AI/ML sources. Ingest never hits the network; mp eval-aiml
 # downloads these into a local zip first. SLP3 is class-use only — do not commit.
 SOURCES: tuple[RemoteFile, ...] = (
     RemoteFile(

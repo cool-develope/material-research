@@ -14,7 +14,8 @@ from material_platform.config import Settings
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Discover materials in a file, directory, or ZIP."
+        prog="mp ingest",
+        description="Discover materials in a file, directory, or ZIP.",
     )
     parser.add_argument("path", type=Path)
     parser.add_argument(

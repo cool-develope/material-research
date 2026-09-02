@@ -1,9 +1,6 @@
 from pathlib import Path
 
 import pytest
-
-from material_platform.application.cli import main
-from material_platform.application.query import main as query_main
 from tests.unit.discovery.trees import (
     COMPLEX_MATERIALS,
     FIXTURE_ZIP,
@@ -12,6 +9,9 @@ from tests.unit.discovery.trees import (
     zip_contents,
 )
 from tests.unit.helpers.pdf import build_text_pdf
+
+from material_platform.cli.ingest import main
+from material_platform.cli.search import main as query_main
 
 
 def test_ingest_simple_mix_fixture_three_materials(
@@ -31,7 +31,8 @@ def test_ingest_simple_mix_fixture_three_materials(
     queried = capsys.readouterr()
     assert code == 0
     assert queried.out.splitlines()[0].startswith("1.")
-    assert "src/api.py lines " in queried.out.splitlines()[0]
+    assert "project" in queried.out.splitlines()[0]
+    assert "src/api.py" not in queried.out
 
 
 def test_ingest_local_cli_prints_tree(
@@ -97,7 +98,8 @@ def test_research_query_cli_prints_citations(
     code = query_main(["Introduction to materials", "--data-dir", str(data_dir)])
     captured = capsys.readouterr()
     assert code == 0
-    assert "paper.pdf page 1" in captured.out
+    assert "paper.pdf" in captured.out
+    assert "page 1" not in captured.out.splitlines()[0]
     assert "backend/" in captured.out
     assert "dataset/" in captured.out
 
@@ -105,7 +107,8 @@ def test_research_query_cli_prints_citations(
     captured = capsys.readouterr()
     assert code == 0
     assert captured.out.splitlines()[0].startswith("1.")
-    assert "src/api.py lines " in captured.out.splitlines()[0]
+    assert "project" in captured.out.splitlines()[0]
+    assert "src/api.py" not in captured.out
 
     code = query_main(
         [
@@ -118,7 +121,8 @@ def test_research_query_cli_prints_citations(
     )
     captured = capsys.readouterr()
     assert code == 0
-    assert "src/api.py lines " in captured.out
+    assert "project" in captured.out
+    assert "src/api.py" not in captured.out
 
     code = query_main(
         [
@@ -132,6 +136,7 @@ def test_research_query_cli_prints_citations(
     captured = capsys.readouterr()
     assert code == 0
     assert "src/api.py" not in captured.out
+    assert "document" in captured.out
 
 
 def test_ingest_long_pdf_compacts_locations(

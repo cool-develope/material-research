@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation, format_location
 from material_platform.index import IndexService
 from material_platform.index.payload import MATERIAL_UNIT_ID
-from material_platform.index.service import ScoredEntry
+from material_platform.index.service import SEARCH_WINDOW, ScoredEntry
 from material_platform.infrastructure.database.repositories import MaterialRepository
 
 _SNIPPET = 160
@@ -27,10 +28,71 @@ _TYPE_ORDER = {
 }
 
 
+@dataclass(frozen=True)
+class MaterialHit:
+    material_id: UUID
+    title: str
+    material_type: str
+    root_path: str
+    score: float
+    siblings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MaterialPage:
+    results: tuple[MaterialHit, ...]
+    has_more: bool
+
+
 class DeepResearchService:
     def __init__(self, session: Session, index: IndexService) -> None:
         self._index = index
         self._materials = MaterialRepository(session)
+
+    def search(
+        self,
+        query: str,
+        *,
+        offset: int = 0,
+        limit: int = 10,
+        material_type: str | None = None,
+        tracer: object | None = None,
+    ) -> MaterialPage:
+        log = tracer or _NoopLog()
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        with log.span(
+            "search", offset=offset, limit=limit, material_type=material_type
+        ):
+            if offset >= SEARCH_WINDOW:
+                page = MaterialPage(results=(), has_more=False)
+            else:
+                fetch = min(limit + 1, SEARCH_WINDOW - offset)
+                hits = self._index.search_materials(
+                    query,
+                    offset=offset,
+                    limit=fetch,
+                    material_type=material_type,
+                    tracer=log,
+                )
+                has_more = len(hits) > limit
+                hits = hits[:limit]
+                loaded = _load_materials(self._materials, hits)
+                siblings = _siblings_by_source(self._materials, loaded)
+                page = MaterialPage(
+                    results=tuple(_material_hit(hit, loaded, siblings) for hit in hits),
+                    has_more=has_more,
+                )
+            log.set_output(
+                {
+                    "hits": len(page.results),
+                    "has_more": page.has_more,
+                    "top": page.results[0].title if page.results else None,
+                }
+            )
+            return page
 
     def select(
         self,
@@ -104,6 +166,22 @@ def _location(entry: IndexEntry) -> ContentLocation:
         line_start=entry.line_start,
         line_end=entry.line_end,
         section=entry.section,
+    )
+
+
+def _material_hit(
+    hit: ScoredEntry,
+    loaded: dict[UUID, Material],
+    siblings: dict[UUID, list[Material]],
+) -> MaterialHit:
+    material = loaded.get(hit.entry.material_id)
+    return MaterialHit(
+        material_id=hit.entry.material_id,
+        title=hit.entry.title,
+        material_type=(material.material_type.value if material is not None else ""),
+        root_path=material.root_path if material is not None else "",
+        score=hit.score,
+        siblings=_sibling_names(siblings, material),
     )
 
 

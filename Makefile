@@ -13,7 +13,7 @@ typecheck:
 	uv run mypy
 
 db-up:
-	docker compose up -d
+	docker compose up -d --remove-orphans
 
 migrate:
 	uv run alembic upgrade head

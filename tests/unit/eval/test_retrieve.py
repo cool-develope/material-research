@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from tests.unit.discovery.trees import SIMPLE_ZIP
 
-from material_platform.application.cli import main as ingest_main
-from material_platform.application.eval_cli import main as eval_main
+from material_platform.cli.ingest import main as ingest_main
+from material_platform.eval.retrieve import main as eval_main
 
 
 def test_eval_retrieve_cli_scores_simple_mix(

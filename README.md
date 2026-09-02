@@ -11,7 +11,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-Pytest ignores `.env` and pins `EMBEDDER=fake`, `RERANKER=off`, `ANALYZER=deterministic`. Copy `.env.example` to `.env` when you start using Postgres and MinIO. `scripts/e2e_research.py` and `scripts/eval_aiml.py --prod` force BGE + reranker + LLM on top of that file.
+Pytest ignores `.env` and pins `EMBEDDER=fake`, `RERANKER=off`, `ANALYZER=deterministic`. Copy `.env.example` to `.env` when you start using Postgres and MinIO. `scripts/e2e_research.py` and `mp eval-aiml --prod` force BGE + reranker + LLM on top of that file.
 
 BGE weights (embed + reranker) are not in git. Download them into the Hugging Face cache:
 
@@ -32,23 +32,23 @@ uv pip install FlagEmbedding
 Then ingest with BGE-M3 instead of the hashed fake embedder:
 
 ```bash
-EMBEDDER=bge-m3 uv run python scripts/ingest_local.py \
+EMBEDDER=bge-m3 uv run mp ingest \
   tests/fixtures/simple_mix/research.zip \
   --data-dir /tmp/mp-bge --process
-EMBEDDER=bge-m3 uv run python scripts/research_query.py "handle_request" \
+EMBEDDER=bge-m3 uv run mp search "handle_request" \
   --data-dir /tmp/mp-bge
-EMBEDDER=bge-m3 uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-bge
+EMBEDDER=bge-m3 uv run mp eval --data-dir /tmp/mp-bge
 ```
 
 Harder ranking eval (eight Materials). After the same BGE ingest, the reranker is opt-in:
 
 ```bash
-EMBEDDER=bge-m3 uv run python scripts/ingest_local.py \
+EMBEDDER=bge-m3 uv run mp ingest \
   tests/fixtures/eval_hard/research.zip \
   --data-dir /tmp/mp-eval-hard-bge --process
-EMBEDDER=bge-m3 uv run python scripts/eval_retrieve.py \
+EMBEDDER=bge-m3 uv run mp eval \
   --data-dir /tmp/mp-eval-hard-bge --cases tests/fixtures/eval/eval_hard.json
-EMBEDDER=bge-m3 RERANKER=bge-v2-m3 uv run python scripts/eval_retrieve.py \
+EMBEDDER=bge-m3 RERANKER=bge-v2-m3 uv run mp eval \
   --data-dir /tmp/mp-eval-hard-bge --cases tests/fixtures/eval/eval_hard.json
 ```
 
@@ -59,7 +59,7 @@ ANALYZER=llm \
 LLM_BASE_URL=http://127.0.0.1:11434/v1 \
 LLM_API_KEY=ollama \
 LLM_MODEL=llama3.1 \
-uv run python scripts/ingest_local.py tests/fixtures/simple_mix/research.zip \
+uv run mp ingest tests/fixtures/simple_mix/research.zip \
   --data-dir /tmp/mp-llm --process
 ```
 
@@ -68,26 +68,34 @@ uv run python scripts/ingest_local.py tests/fixtures/simple_mix/research.zip \
 SQLite + filesystem store, no Docker:
 
 ```bash
-uv run python scripts/ingest_local.py tests/fixtures/simple_mix/research.zip \
+uv run mp ingest tests/fixtures/simple_mix/research.zip \
   --data-dir /tmp/mp-simple --process
-uv run python scripts/research_query.py "Introduction to materials" \
+uv run mp search "Introduction to materials" \
   --data-dir /tmp/mp-simple
-uv run python scripts/research_query.py "handle_request" \
+uv run mp search "handle_request" \
   --data-dir /tmp/mp-simple
-uv run python scripts/research_query.py "handle_request" \
+uv run mp search "handle_request" \
   --data-dir /tmp/mp-simple --material-type project
-uv run python scripts/research_agent.py "handle_request" \
+uv run mp chat "handle_request" \
   --data-dir /tmp/mp-simple --trace
-uv run python scripts/research_agent.py "handle_request" \
+uv run mp chat "handle_request" \
   --data-dir /tmp/mp-simple --mode quick
-uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-simple --lexical-only
-uv run python scripts/eval_retrieve.py \
+uv run mp eval --data-dir /tmp/mp-simple --lexical-only
+uv run mp eval \
   --source tests/fixtures/eval_long/research.zip \
   --cases tests/fixtures/eval/eval_long.json \
   --sweep chunk_tokens=256,512,1024 \
   --work-dir /tmp/mp-chunk-sweep \
   --lexical-only
 ```
+
+HTTP wraps the same Runtime (ingest stays a local path):
+
+```bash
+uv run mp serve --data-dir /tmp/mp-simple
+```
+
+`POST /search` `{query, page?, page_size?, material_type?}` returns ranked **materials** (hop-1 only, default 10 per page, max 20) and a Langfuse `trace_url` when keys are set. `POST /chat` `{query, mode?}` runs the Deep Research agent (`quick` | `standard` | `deep`) and returns a cited report (hop 1/2 stay 5/20). `GET /health` is liveness only. `--postgres` uses `DATABASE_URL` and Qdrant. Chat uses `LLM_BASE_URL` when set.
 
 That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
 
@@ -100,15 +108,15 @@ A larger dump lives at `tests/fixtures/mixed_zip/research.zip`. Ranking traps li
 A real AI/ML corpus (Jurafsky & Martin SLP3 draft, arXiv LLM papers, Hugging Face GitHub trees, PyPI wheels, a DJL JAR) is **not in git**. The ingest pipeline still takes a local path only; the fixture builder downloads first:
 
 ```bash
-uv run python scripts/eval_aiml.py --build-only
-uv run python scripts/eval_aiml.py --skip-build --data-dir /tmp/mp-aiml --lexical-only
+uv run mp eval-aiml --build-only
+uv run mp eval-aiml --skip-build --data-dir /tmp/mp-aiml --lexical-only
 EVAL_AIML=1 uv run pytest tests/unit/eval/test_eval_aiml.py -k ingest
 ```
 
 The retrieve table is printed to stdout and written to `{data-dir}/eval_aiml_report.txt` (for example `/tmp/mp-aiml/eval_aiml_report.txt`). Re-score an existing sqlite ingest without rebuilding:
 
 ```bash
-uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-aiml \
+uv run mp eval --data-dir /tmp/mp-aiml \
   --cases tests/fixtures/eval/eval_aiml.json --lexical-only
 ```
 
@@ -116,13 +124,13 @@ uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-aiml \
 
 ```bash
 docker compose up -d
-uv run python scripts/eval_aiml.py --skip-build --prod --data-dir /tmp/mp-aiml-prod
+uv run mp eval-aiml --skip-build --prod --data-dir /tmp/mp-aiml-prod
 ```
 
 That run scores lexical and semantic cases, traces the agent on Langfuse, and writes `/tmp/mp-aiml-prod/eval_aiml_report.txt`. Re-score without ingesting again:
 
 ```bash
-uv run python scripts/eval_aiml.py --skip-build --prod --skip-ingest \
+uv run mp eval-aiml --skip-build --prod --skip-ingest \
   --data-dir /tmp/mp-aiml-prod
 ```
 
@@ -208,6 +216,8 @@ uv run alembic upgrade head
 
 Langfuse reuses the same Postgres (`langfuse` database) and MinIO (`langfuse` bucket). UI: [http://localhost:3100](http://localhost:3100) (Dagster stays on 3000). Login `langfuse@example.com` / `langfuselocal`. Copy `.env.example` keys (`pk-lf-local` / `sk-lf-local`) so the agent ships traces.
 
+LangGraph reuses the same Postgres (`langgraph` database) for checkpoints and the same Qdrant (`langgraph` collection, hybrid dense+sparse 1024) for the agent store. `docker compose up` creates both. Checkpoint tables are created by `PostgresSaver.setup()` when the agent checkpointer is wired.
+
 Production-like path (Postgres, MinIO, Qdrant, BGE-M3, reranker, LLM analysis + agent, Langfuse). Needs compose up, Ollama (or `LLM_BASE_URL`), FlagEmbedding, and `scripts/download_bge.py`:
 
 ```bash
@@ -236,11 +246,12 @@ resources:
 CLI against the same stack:
 
 ```bash
-uv run python scripts/ingest_local.py tests/fixtures/mixed_zip/research.zip \
+uv run mp ingest tests/fixtures/mixed_zip/research.zip \
   --postgres --process
-uv run python scripts/research_query.py "Introduction to materials" --postgres
-uv run python scripts/research_query.py "handle_request" --postgres \
+uv run mp search "Introduction to materials" --postgres
+uv run mp search "handle_request" --postgres \
   --material-type project
+uv run mp serve --postgres
 ```
 
 Gate 14 (no duplicate Materials after a new Dagster resource against this stack):
@@ -254,14 +265,17 @@ LIVE_COMPOSE=1 uv run pytest tests/integration/test_compose_reingest.py
 ```
 defs/                 Dagster jobs, sensor, PlatformResource
 src/material_platform/
+  api/                FastAPI search and chat
+  application/        Runtime, ingest, process, select
+  cli/                mp ingest / search / chat / serve
   discovery/          boundary detectors, ZIP expansion
-  application/        ingest, process, claim queue, Deep Research select
   analysis/           deterministic MaterialAnalysis
   agent/              Deep Research plan / retrieve / cited report
-  eval/               labeled retrieval queries and hit@1 scoring
+  eval/               labeled retrieval scoring, AIML, prod knobs
   index/              Qdrant hybrid search (BGE-M3 or fake embedder)
   infrastructure/     stores, embedder, optional hop-2 reranker
   research/           ResearchMaterial builder
+scripts/              download_bge.py, e2e_research.py
 migrations/           Alembic (identities and state)
 tests/fixtures/       mixed ZIP used in tests and the example ingest
 ```

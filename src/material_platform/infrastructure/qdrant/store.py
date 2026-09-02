@@ -38,11 +38,12 @@ class QdrantIndexStore:
         sparse_indices: list[int],
         sparse_values: list[float],
         limit: int,
+        offset: int = 0,
         level: str | None = None,
         material_ids: tuple[UUID, ...] | None = None,
         material_type: str | None = None,
     ) -> list[models.ScoredPoint]:
-        prefetch = max(limit * 4, 20)
+        prefetch = max((offset + limit) * 4, 20)
         query_filter = _payload_filter(level, material_ids, material_type)
         sparse = models.SparseVector(
             indices=sparse_indices,
@@ -67,6 +68,7 @@ class QdrantIndexStore:
             query=models.FusionQuery(fusion=models.Fusion.RRF),
             query_filter=query_filter,
             limit=limit,
+            offset=offset,
             with_payload=True,
         )
         return list(result.points)
@@ -129,6 +131,15 @@ def _material_filter(material_id: UUID) -> models.Filter:
 
 
 def _ensure_collection(client: QdrantClient, collection: str) -> None:
+    ensure_hybrid_collection(client, collection)
+
+
+def ensure_hybrid_collection(
+    client: QdrantClient,
+    collection: str,
+    *,
+    payload_indexes: bool = True,
+) -> None:
     if client.collection_exists(collection):
         _assert_hybrid_collection(client, collection)
         return
@@ -144,7 +155,7 @@ def _ensure_collection(client: QdrantClient, collection: str) -> None:
             SPARSE_NAME: models.SparseVectorParams(),
         },
     )
-    if _is_local(client):
+    if not payload_indexes or _is_local(client):
         return
     client.create_payload_index(
         collection_name=collection,

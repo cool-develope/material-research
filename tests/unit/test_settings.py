@@ -34,6 +34,8 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.agent_mode == "standard"
     assert settings.langfuse_public_key is None
     assert settings.langfuse_host.startswith("https://")
+    assert settings.langgraph_database_url.endswith("/langgraph")
+    assert settings.langgraph_qdrant_collection == "langgraph"
 
 
 def test_pytest_ignores_dotenv() -> None:

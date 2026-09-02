@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
 
+    langgraph_database_url: str = (
+        "postgresql://material:material@localhost:5432/langgraph"
+    )
+    langgraph_qdrant_collection: str = "langgraph"
+
     @classmethod
     def settings_customise_sources(
         cls,

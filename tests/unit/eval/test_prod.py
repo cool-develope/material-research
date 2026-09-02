@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from material_platform.application.local import sqlite_settings, uses_postgres
-from material_platform.application.prod import (
+from material_platform.config import Settings
+from material_platform.eval.prod import (
     AIML_COLLECTION,
     E2E_COLLECTION,
     apply_prod_knobs,
@@ -9,7 +10,6 @@ from material_platform.application.prod import (
     prod_env,
     wipe_index,
 )
-from material_platform.config import Settings
 
 
 def test_apply_prod_knobs_force_bge_llm_and_remote_qdrant() -> None:
@@ -42,7 +42,7 @@ def test_prod_env_overrides_knobs() -> None:
 
 
 def test_preflight_prod_lists_compose_gaps(monkeypatch) -> None:
-    import material_platform.application.prod as prod
+    import material_platform.eval.prod as prod
 
     monkeypatch.setattr(prod, "listening", lambda port: False)
     monkeypatch.setattr(prod, "llm_ok", lambda settings: False)

@@ -168,6 +168,88 @@ def test_search_routes_keyword_query_to_material_units() -> None:
     assert all(hit.entry.unit_id != MATERIAL_UNIT_ID for hit in detail.ranked)
 
 
+def test_search_materials_returns_material_points() -> None:
+    index = make_test_index()
+    target = _research(_page("paper.pdf", 1, "Introduction to materials"))
+    target = target.model_copy(
+        update={"metadata": {"keywords": ["aerospace_alloys_topic"]}}
+    )
+    distractor = ResearchMaterial(
+        material_id=uuid4(),
+        material_type=MaterialType.DOCUMENT,
+        material_subtype="pdf",
+        title="noise.pdf",
+        summary="unrelated notes",
+        content_units=(_page("noise.pdf", 1, "aerospace_alloys_topic " * 40),),
+        provenance=MaterialProvenance(source_id=uuid4(), root_path="noise.pdf"),
+    )
+    index.replace(target)
+    index.replace(distractor)
+    hits = index.search_materials("aerospace_alloys_topic")
+    assert hits
+    assert all(hit.entry.unit_id == MATERIAL_UNIT_ID for hit in hits)
+    assert hits[0].entry.title == "paper.pdf"
+    assert all(hit.entry.path is None for hit in hits)
+
+
+def test_search_materials_paginates() -> None:
+    index = make_test_index()
+    for index_no in range(5):
+        research = ResearchMaterial(
+            material_id=uuid4(),
+            material_type=MaterialType.DOCUMENT,
+            material_subtype="pdf",
+            title=f"paper{index_no}.pdf",
+            summary="notes",
+            content_units=(
+                _page(f"paper{index_no}.pdf", 1, f"shared topic {index_no}"),
+            ),
+            provenance=MaterialProvenance(
+                source_id=uuid4(), root_path=f"paper{index_no}.pdf"
+            ),
+        )
+        index.replace(research)
+    first = index.search_materials("shared topic", offset=0, limit=2)
+    second = index.search_materials("shared topic", offset=2, limit=2)
+    assert len(first) == 2
+    assert len(second) == 2
+    first_ids = {hit.entry.material_id for hit in first}
+    second_ids = {hit.entry.material_id for hit in second}
+    assert first_ids.isdisjoint(second_ids)
+
+
+def test_search_materials_filters_by_material_type() -> None:
+    index = make_test_index()
+    paper = _research(_page("paper.pdf", 1, "def handle_request is discussed"))
+    backend = ResearchMaterial(
+        material_id=uuid4(),
+        material_type=MaterialType.PROJECT,
+        material_subtype="python",
+        title="backend",
+        summary="REST handler",
+        content_units=(
+            ContentUnit(
+                unit_id="src/api.py",
+                type="file",
+                content="def handle_request():\n    return 'ok'\n",
+                location=ContentLocation(path="src/api.py", line_start=1, line_end=2),
+                digest="c" * 64,
+                metadata={"strategy": "code.file", "chunk_index": 0},
+            ),
+        ),
+        provenance=MaterialProvenance(source_id=uuid4(), root_path="backend/"),
+    )
+    index.replace(paper)
+    index.replace(backend)
+    project_hits = index.search_materials("handle_request", material_type="project")
+    assert project_hits
+    assert all(hit.entry.unit_id == MATERIAL_UNIT_ID for hit in project_hits)
+    assert project_hits[0].entry.title == "backend"
+    document_hits = index.search_materials("handle_request", material_type="document")
+    assert document_hits
+    assert document_hits[0].entry.title == "paper.pdf"
+
+
 def test_search_falls_back_without_material_points() -> None:
     from qdrant_client import QdrantClient
 

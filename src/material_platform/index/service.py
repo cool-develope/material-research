@@ -53,6 +53,9 @@ class SearchDetail:
 
 MATERIAL_HOP = 5
 UNIT_HOP = 20
+SEARCH_PAGE_DEFAULT = 10
+SEARCH_PAGE_MAX = 20
+SEARCH_WINDOW = 100
 
 
 class IndexService:
@@ -86,6 +89,44 @@ class IndexService:
         return self.search_detail(
             query, limit=limit, material_type=material_type
         ).ranked
+
+    def search_materials(
+        self,
+        query: str,
+        *,
+        offset: int = 0,
+        limit: int = SEARCH_PAGE_DEFAULT,
+        material_type: str | None = None,
+        tracer: object | None = None,
+    ) -> tuple[ScoredEntry, ...]:
+        log = tracer if tracer is not None else _NoopLog()
+        if not query.strip() or limit < 1:
+            return ()
+        kind = _normalize_type(material_type)
+        model = _model_name(self._embedder)
+        with log.span("embed", model=model, chars=len(query)):
+            embedded = self._embedder.embed(query)
+            log.set_output(
+                {
+                    "model": model,
+                    "chars": len(query),
+                    "dense": len(embedded.dense),
+                    "sparse": len(embedded.sparse_indices),
+                }
+            )
+        with log.span("hop1", k=limit, offset=max(offset, 0), level="material"):
+            points = self._store.search(
+                dense=list(embedded.dense),
+                sparse_indices=list(embedded.sparse_indices),
+                sparse_values=list(embedded.sparse_values),
+                limit=limit,
+                offset=max(offset, 0),
+                level=LEVEL_MATERIAL,
+                material_type=kind,
+            )
+            hits = _scored_points(points)
+            log.set_output(_brief_materials(hits))
+        return hits
 
     def search_detail(
         self,

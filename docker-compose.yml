@@ -1,5 +1,7 @@
 # Local stack. Langfuse reuses postgres (database `langfuse`) and minio
-# (bucket `langfuse`). ClickHouse and Redis are Langfuse-only (traces / queue).
+# (bucket `langfuse`). LangGraph reuses postgres (database `langgraph`)
+# for checkpoints and Qdrant (collection `langgraph`) for the agent store.
+# ClickHouse and Redis are Langfuse-only (traces / queue).
 # UI: http://localhost:3100  (Dagster keeps 3000). ClickHouse native port is
 # not published — it would collide with MinIO on 9000. Images are Langfuse v4
 # (matches Python SDK 4.x; same Postgres/ClickHouse/Redis/MinIO as v3).
@@ -44,7 +46,7 @@ x-langfuse-depends: &langfuse-depends
     condition: service_healthy
   clickhouse:
     condition: service_healthy
-  langfuse-db-init:
+  postgres-db-init:
     condition: service_completed_successfully
   minio-init:
     condition: service_completed_successfully
@@ -96,12 +98,8 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:6333/readyz",
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf \"GET /readyz HTTP/1.0\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q \"200 OK\"'",
         ]
       interval: 5s
       timeout: 5s
@@ -135,7 +133,7 @@ services:
       retries: 10
       start_period: 10s
 
-  langfuse-db-init:
+  postgres-db-init:
     image: postgres:16
     depends_on:
       postgres:
@@ -144,11 +142,34 @@ services:
       PGPASSWORD: material
     entrypoint: ["bash", "-c"]
     command:
-      - >
-        psql -h postgres -U material -d material -tc
-        "SELECT 1 FROM pg_database WHERE datname = 'langfuse'"
-        | grep -q 1
-        || psql -h postgres -U material -d material -c "CREATE DATABASE langfuse"
+      - |
+        set -euo pipefail
+        for db in langfuse langgraph; do
+          if psql -h postgres -U material -d material -tc \
+            "SELECT 1 FROM pg_database WHERE datname = '$$db'" | grep -q 1; then
+            echo "$$db exists"
+          else
+            psql -h postgres -U material -d material -c "CREATE DATABASE $$db"
+          fi
+        done
+    restart: "no"
+
+  qdrant-init:
+    image: curlimages/curl:8.12.1
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -eu
+        if curl -sf "http://qdrant:6333/collections/langgraph" >/dev/null; then
+          echo "langgraph collection exists"
+        else
+          curl -sf -X PUT "http://qdrant:6333/collections/langgraph" \
+            -H "Content-Type: application/json" \
+            -d '{"vectors":{"dense":{"size":1024,"distance":"Cosine"}},"sparse_vectors":{"sparse":{}}}'
+        fi
     restart: "no"
 
   minio-init:

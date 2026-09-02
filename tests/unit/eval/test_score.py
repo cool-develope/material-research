@@ -73,12 +73,8 @@ def test_matches_section() -> None:
         snippet="",
         score=1.0,
     )
-    assert matches(
-        hit, ExpectedHit(path="src/api.py", section="retry_failed_request")
-    )
-    assert not matches(
-        hit, ExpectedHit(path="src/api.py", section="handle_request")
-    )
+    assert matches(hit, ExpectedHit(path="src/api.py", section="retry_failed_request"))
+    assert not matches(hit, ExpectedHit(path="src/api.py", section="handle_request"))
 
 
 def test_load_default_suite() -> None:

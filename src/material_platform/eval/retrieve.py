@@ -22,7 +22,8 @@ from material_platform.eval.experiment import (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Score labeled retrieval queries, or sweep chunk_tokens."
+        prog="mp eval",
+        description="Score labeled retrieval queries, or sweep chunk_tokens.",
     )
     parser.add_argument(
         "--cases",
