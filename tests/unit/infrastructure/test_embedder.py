@@ -22,6 +22,26 @@ def test_make_embedder_rejects_unknown() -> None:
         make_embedder(Settings(_env_file=None, embedder="nope"))
 
 
+def test_make_embedder_reuses_bge_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    from material_platform.infrastructure.embedding import factory as embed_factory
+
+    class Fake:
+        def __init__(self, name: str) -> None:
+            self.model_name = name
+            Fake.calls += 1
+
+    Fake.calls = 0
+    embed_factory._MODELS.clear()
+    monkeypatch.setattr(
+        "material_platform.infrastructure.embedding.bge.BgeM3Embedder", Fake
+    )
+    first = make_embedder(Settings(_env_file=None, embedder="bge-m3"))
+    second = make_embedder(Settings(_env_file=None, embedder="bge-m3"))
+    assert first is second
+    assert Fake.calls == 1
+    embed_factory._MODELS.clear()
+
+
 @pytest.mark.skipif(
     os.environ.get("RUN_BGE") != "1", reason="set RUN_BGE=1 to load BGE-M3"
 )

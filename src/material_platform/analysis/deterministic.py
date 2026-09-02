@@ -3,27 +3,20 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from material_platform.analysis.keywords import from_units, grounded, unique
+from material_platform.analysis.profile import MaterialProfile
+from material_platform.analysis.profiler import build_profile
 from material_platform.classification.deterministic import ClassificationDecision
+from material_platform.config import Settings
 from material_platform.domain.analysis import AnalyzedEntity, MaterialAnalysis
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentUnit
+from material_platform.extraction.common import MaterialFile
 
 ANALYZER = "deterministic"
-ANALYZER_VERSION = "v1"
+ANALYZER_VERSION = "v2"
 
-
-class DeterministicAnalyzer:
-    def analyze(
-        self,
-        material: Material,
-        decision: ClassificationDecision,
-        units: tuple[ContentUnit, ...],
-    ) -> MaterialAnalysis:
-        return analyze_units(material, decision, units)
-
-
-_HEADING = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _FUNC = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)", re.MULTILINE)
 _CLASS = re.compile(r"^\s*class\s+([A-Za-z_]\w*)", re.MULTILINE)
 _IMPORT = re.compile(
@@ -33,23 +26,7 @@ _IMPORT = re.compile(
 _JS_EXPORT = re.compile(
     r"(?:export\s+)?(?:async\s+)?(?:const|function|class|let|var)\s+([A-Za-z_]\w*)"
 )
-_WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]{3,}")
-_SENTENCE = re.compile(r"(?<=[.!?])\s+")
-_STOP = frozenset(
-    {
-        "this",
-        "that",
-        "with",
-        "from",
-        "into",
-        "return",
-        "none",
-        "true",
-        "false",
-        "self",
-        "print",
-    }
-)
+_HEADING = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _PURPOSE = {
     MaterialType.DOCUMENT: "document for research reading",
     MaterialType.PROJECT: "software project",
@@ -64,111 +41,137 @@ _RELEVANCE = {
 }
 
 
+class DeterministicAnalyzer:
+    def __init__(self, settings: Settings | None = None) -> None:
+        self._settings = settings
+
+    def analyze(
+        self,
+        material: Material,
+        decision: ClassificationDecision,
+        units: tuple[ContentUnit, ...],
+        *,
+        files: tuple[MaterialFile, ...] = (),
+        profile: MaterialProfile | None = None,
+    ) -> MaterialAnalysis:
+        built = profile or build_profile(
+            material,
+            decision,
+            units,
+            files=files,
+            settings=self._settings,
+        )
+        return _from_profile(material, decision, units, built)
+
+
 def analyze_units(
     material: Material,
     decision: ClassificationDecision,
     units: tuple[ContentUnit, ...],
+    *,
+    files: tuple[MaterialFile, ...] = (),
 ) -> MaterialAnalysis:
-    headings = _collect(_HEADING, units)
-    entities = _entities(units, headings)
-    technologies = _technologies(decision, units)
-    topics = _topics(material, units, headings)
+    return DeterministicAnalyzer().analyze(
+        material, decision, units, files=files
+    )
+
+
+def _from_profile(
+    material: Material,
+    decision: ClassificationDecision,
+    units: tuple[ContentUnit, ...],
+    profile: MaterialProfile,
+) -> MaterialAnalysis:
+    leaf = profile.section_digests[0] if profile.section_digests else {}
+    summary = _string(leaf.get("summary")) or _fallback_summary(decision, units)
+    title = _title(material, units, profile)
+    pool = profile.candidate_keywords or from_units(units)
+    keywords = grounded(list(pool), pool, limit=25)
+    topics = unique(list(_strings(leaf.get("topics"))) + list(pool[:8]), limit=12)
+    capabilities = _capabilities(profile)
     return MaterialAnalysis(
         material_id=material.material_id,
-        title=_title(material, headings, units),
-        summary=_summary(decision, units),
+        title=title,
+        summary=summary,
         purpose=_PURPOSE.get(decision.material_type),
         topics=topics,
-        technologies=technologies,
-        entities=entities,
+        keywords=keywords,
+        technologies=_technologies(decision, units, profile),
+        capabilities=capabilities,
+        entities=_entities(units),
         research_relevance=_RELEVANCE.get(decision.material_type, 0.4),
         analyzer=ANALYZER,
         analyzer_version=ANALYZER_VERSION,
+        coverage=profile.coverage,
     )
 
 
 def _title(
     material: Material,
-    headings: tuple[str, ...],
     units: tuple[ContentUnit, ...],
+    profile: MaterialProfile,
 ) -> str:
+    for key in ("title", "package"):
+        value = profile.identity.get(key)
+        if isinstance(value, str) and value.strip():
+            version = profile.identity.get("version")
+            if key == "package" and isinstance(version, str) and version.strip():
+                return f"{value.strip()} {version.strip()}"
+            return value.strip()
     for unit in units:
         title = unit.metadata.get("title")
         if isinstance(title, str) and title.strip():
             return title.strip()
-        package = unit.metadata.get("package")
-        if isinstance(package, str) and package.strip():
-            version = unit.metadata.get("version")
-            if isinstance(version, str) and version.strip():
-                return f"{package.strip()} {version.strip()}"
-            return package.strip()
+    headings = _HEADING.findall("\n".join(unit.content for unit in units[:4]))
     if headings:
-        return headings[0]
+        return headings[0].strip()
     return material.name
-
-
-def _summary(
-    decision: ClassificationDecision,
-    units: tuple[ContentUnit, ...],
-) -> str:
-    for unit in units:
-        text = unit.content.strip()
-        if not text:
-            continue
-        parts = [part.strip() for part in _SENTENCE.split(text) if part.strip()]
-        if parts:
-            return " ".join(parts[:2])[:400]
-    count = len(units)
-    kind = decision.material_type.value
-    noun = "unit" if count == 1 else "units"
-    return f"{count} {kind} {noun}"
-
-
-def _topics(
-    material: Material,
-    units: tuple[ContentUnit, ...],
-    headings: tuple[str, ...],
-) -> tuple[str, ...]:
-    words: list[str] = []
-    stem = Path(material.name).stem
-    if stem and stem not in {"src", "backend", "frontend"}:
-        words.append(stem)
-    words.extend(headings)
-    for unit in units:
-        for match in _WORD.findall(unit.content):
-            lowered = match.lower()
-            if lowered not in _STOP:
-                words.append(lowered)
-    return _unique(words, limit=12)
 
 
 def _technologies(
     decision: ClassificationDecision,
     units: tuple[ContentUnit, ...],
+    profile: MaterialProfile,
 ) -> tuple[str, ...]:
     names: list[str] = []
     if decision.subtype:
         names.append(decision.subtype)
+    deps = profile.identity.get("dependencies")
+    if isinstance(deps, list):
+        names.extend(str(item) for item in deps)
+    langs = profile.structure.get("languages")
+    if isinstance(langs, dict):
+        names.extend(str(item) for item in langs)
     for unit in units:
         for match in _IMPORT.finditer(unit.content):
             package = match.group(1) or match.group(2)
             if package:
                 names.append(package.split(".", maxsplit=1)[0])
-    return _unique(names, limit=8)
+    return unique(names, limit=8)
+
+
+def _capabilities(profile: MaterialProfile) -> tuple[str, ...]:
+    names: list[str] = []
+    for source in (profile.identity, profile.structure):
+        value = source.get("entry_points")
+        if isinstance(value, list):
+            names.extend(str(item) for item in value if item)
+    return unique(names, limit=12)
 
 
 def _entities(
     units: tuple[ContentUnit, ...],
-    headings: tuple[str, ...],
 ) -> tuple[AnalyzedEntity, ...]:
     found: list[AnalyzedEntity] = []
     seen: set[tuple[str, str]] = set()
-    for heading in headings:
-        key = ("heading", heading.lower())
-        if key not in seen:
-            seen.add(key)
-            found.append(AnalyzedEntity(name=heading, kind="heading"))
     for unit in units:
+        for match in _HEADING.finditer(unit.content):
+            name = match.group(1).strip()
+            key = ("heading", name.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(AnalyzedEntity(name=name, kind="heading"))
         location = unit.location
         for pattern, kind in ((_FUNC, "function"), (_CLASS, "class")):
             for match in pattern.finditer(unit.content):
@@ -191,28 +194,22 @@ def _entities(
     return tuple(found[:24])
 
 
-def _collect(
-    pattern: re.Pattern[str],
-    units: tuple[ContentUnit, ...],
-) -> tuple[str, ...]:
-    names: list[str] = []
-    for unit in units:
-        names.extend(match.strip() for match in pattern.findall(unit.content))
-    return _unique(names, limit=12)
+def _fallback_summary(
+    decision: ClassificationDecision, units: tuple[ContentUnit, ...]
+) -> str:
+    count = len(units)
+    kind = decision.material_type.value
+    noun = "unit" if count == 1 else "units"
+    return f"{count} {kind} {noun}"
 
 
-def _unique(items: list[str], *, limit: int) -> tuple[str, ...]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for item in items:
-        key = item.strip()
-        if not key:
-            continue
-        lowered = key.lower()
-        if lowered in seen:
-            continue
-        seen.add(lowered)
-        out.append(key)
-        if len(out) >= limit:
-            break
-    return tuple(out)
+def _string(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return unique([str(item) for item in value if item], limit=12)

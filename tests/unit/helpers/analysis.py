@@ -63,6 +63,7 @@ class StubLlm:
             "summary": "A survey of alloys for research use.",
             "purpose": "document for research reading",
             "topics": ["alloys", "materials"],
+            "keywords": ["materials", "unicorn"],
             "technologies": [],
             "research_relevance": 0.8,
         }

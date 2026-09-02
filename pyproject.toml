@@ -40,8 +40,9 @@ packages = ["src/material_platform"]
 module_name = "defs.definitions"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
 pythonpath = ["."]
+# Knobs are pinned in tests/conftest.py. Settings skips .env under pytest.
 
 [tool.ruff]
 line-length = 88

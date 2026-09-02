@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print span names. Langfuse is attached when keys are set.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("quick", "standard", "deep"),
+        default=None,
+        help="Agent budget: quick=3 selects, standard=8, deep=16. Hop 1/2 stay 5/20.",
+    )
     args = parser.parse_args(argv)
     settings = Settings()
     if not args.postgres:
@@ -71,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             select,
             tracer=tracer,
             client=client,
+            mode=args.mode or settings.agent_mode,
         )
         report = agent.ask(args.query)
     sys.stdout.write(report.text)

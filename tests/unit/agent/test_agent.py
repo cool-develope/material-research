@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from material_platform.agent.models import MAX_SELECT_CALLS
 from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import RecordingTracer
@@ -26,7 +28,13 @@ def test_first_select_is_raw_query_and_spans_are_traced() -> None:
     hit = _hit("src/api.py", snippet="def handle_request")
     queries: list[str] = []
 
-    def select(query: str, *, limit: int = 5, material_type: str | None = None):
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
         queries.append(query)
         return (hit,)
 
@@ -65,7 +73,13 @@ def test_first_select_is_raw_query_and_spans_are_traced() -> None:
 def test_select_budget_never_exceeds_max() -> None:
     calls = {"n": 0}
 
-    def select(query: str, *, limit: int = 5, material_type: str | None = None):
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
         calls["n"] += 1
         return ()
 
@@ -87,6 +101,73 @@ def test_select_budget_never_exceeds_max() -> None:
     assert "Summary" in report.text
 
 
+def test_quick_mode_caps_selects_below_standard() -> None:
+    calls = {"n": 0}
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        calls["n"] += 1
+        return ()
+
+    class Planner:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            return {
+                "objective": "research",
+                "questions": [
+                    {"id": f"Q{index}", "question": f"topic {index} extra"}
+                    for index in range(1, 8)
+                ],
+            }
+
+    report = ResearchAgent(
+        select, tracer=RecordingTracer(), client=Planner(), mode="quick"
+    ).ask("root question")
+    assert calls["n"] == 3
+    assert calls["n"] < MAX_SELECT_CALLS
+    assert report.text
+
+
+def test_deep_mode_allows_more_selects_than_standard() -> None:
+    calls = {"n": 0}
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        calls["n"] += 1
+        return ()
+
+    class Planner:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            return {
+                "objective": "research",
+                "questions": [
+                    {"id": f"Q{index}", "question": f"topic {index} extra"}
+                    for index in range(1, 10)
+                ],
+            }
+
+    report = ResearchAgent(
+        select, tracer=RecordingTracer(), client=Planner(), mode="deep"
+    ).ask("root question")
+    assert calls["n"] > MAX_SELECT_CALLS
+    assert calls["n"] <= 16
+    assert report.text
+
+
+def test_unknown_agent_mode_raises() -> None:
+    with pytest.raises(ValueError, match="unknown agent mode"):
+        ResearchAgent(lambda *args, **kwargs: (), mode="turbo")
+
+
 def test_material_point_is_never_a_citation() -> None:
     bad = Citation(
         material_id=uuid4(),
@@ -98,7 +179,13 @@ def test_material_point_is_never_a_citation() -> None:
     )
     good = _hit("src/api.py")
 
-    def select(query: str, *, limit: int = 5, material_type: str | None = None):
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
         return (bad, good)
 
     report = ResearchAgent(select, tracer=RecordingTracer()).ask("handle_request")
@@ -119,7 +206,13 @@ def test_report_sections_follow_questions() -> None:
 
     api = _hit("src/api.py", snippet="oauth")
 
-    def select(query: str, *, limit: int = 5, material_type: str | None = None):
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
         if "xyzzy" in query or "missing" in query:
             return ()
         return (api,)
@@ -259,5 +352,3 @@ def test_graph_is_compiled_langgraph() -> None:
     )
     for name in required:
         assert name in nodes
-
-

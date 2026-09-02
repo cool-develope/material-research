@@ -3,6 +3,7 @@ from uuid import uuid4
 from material_platform.domain.citation import Citation
 from material_platform.domain.research_material import ContentLocation
 from material_platform.eval import (
+    AIML_SUITE,
     DEFAULT_SUITE,
     HARD_SUITE,
     LEXICAL,
@@ -101,6 +102,13 @@ def test_load_long_suite() -> None:
     assert suite.id == "eval_long"
     assert all(case.mode == LEXICAL for case in suite.cases)
     assert len(suite.cases) == 3
+
+
+def test_load_aiml_suite() -> None:
+    suite = load_suite(AIML_SUITE)
+    assert suite.id == "eval_aiml"
+    assert sum(1 for case in suite.cases if case.mode == LEXICAL) == 10
+    assert sum(1 for case in suite.cases if case.mode == SEMANTIC) == 2
 
 
 def test_score_case_hit_at_1() -> None:

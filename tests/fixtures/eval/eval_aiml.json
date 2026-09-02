@@ -1,0 +1,67 @@
+{
+  "id": "eval_aiml",
+  "cases": [
+    {
+      "id": "slp3-title",
+      "query": "Speech and Language Processing",
+      "expect": [{"path": "slp3.pdf"}]
+    },
+    {
+      "id": "qlora-nf4",
+      "query": "4-bit NormalFloat",
+      "expect": [{"path": "qlora.pdf"}]
+    },
+    {
+      "id": "react-paper",
+      "query": "Synergizing Reasoning and Acting",
+      "expect": [{"path": "react.pdf"}]
+    },
+    {
+      "id": "lora-paper",
+      "query": "Low-Rank Adaptation of Large Language Models",
+      "expect": [{"path": "lora.pdf"}]
+    },
+    {
+      "id": "foundation-homogenization",
+      "query": "homogenization",
+      "expect": [{"path": "foundation_models.pdf"}]
+    },
+    {
+      "id": "peft-project",
+      "query": "get_peft_model",
+      "expect": [{"path": "src/peft"}]
+    },
+    {
+      "id": "transformers-pretrained",
+      "query": "PreTrainedModel",
+      "expect": [{"path": "src/transformers"}]
+    },
+    {
+      "id": "react-readme",
+      "query": "ReAct Prompting",
+      "expect": [{"path": "react_readme.md", "lines": true}]
+    },
+    {
+      "id": "alpaca-instruction",
+      "query": "Give three tips for staying healthy",
+      "expect": [{"path": "alpaca_sft.csv"}]
+    },
+    {
+      "id": "djl-jar",
+      "query": "ai.djl",
+      "expect": [{"path": "djl-api-0.31.1.jar"}]
+    },
+    {
+      "id": "qlora-paraphrase",
+      "query": "finetune a quantized 4-bit language model with adapters",
+      "mode": "semantic",
+      "expect": [{"path": "qlora.pdf"}]
+    },
+    {
+      "id": "react-paraphrase",
+      "query": "language agent that reasons then calls tools in a loop",
+      "mode": "semantic",
+      "expect": [{"path": "react.pdf"}]
+    }
+  ]
+}

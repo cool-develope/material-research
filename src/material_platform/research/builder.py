@@ -60,13 +60,11 @@ def build_research_material(
         title = analysis.title
         summary = analysis.summary
         metadata["topics"] = list(analysis.topics)
+        metadata["keywords"] = list(analysis.keywords)
         metadata["technologies"] = list(analysis.technologies)
         metadata["analysis_version"] = analysis.analyzer_version
         metadata["analyzer"] = analysis.analyzer
-        if analysis.digest_units is not None:
-            metadata["digest_units"] = analysis.digest_units
-        if analysis.omitted_units is not None:
-            metadata["omitted_units"] = analysis.omitted_units
+        metadata["coverage"] = analysis.coverage.model_dump(mode="json")
     return ResearchMaterial(
         material_id=material.material_id,
         material_type=decision.material_type,

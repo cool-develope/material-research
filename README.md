@@ -11,7 +11,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-Copy `.env.example` to `.env` when you start using Postgres and MinIO.
+Pytest ignores `.env` and pins `EMBEDDER=fake`, `RERANKER=off`, `ANALYZER=deterministic`. Copy `.env.example` to `.env` when you start using Postgres and MinIO. `scripts/e2e_research.py` and `scripts/eval_aiml.py --prod` force BGE + reranker + LLM on top of that file.
 
 BGE weights (embed + reranker) are not in git. Download them into the Hugging Face cache:
 
@@ -52,7 +52,7 @@ EMBEDDER=bge-m3 RERANKER=bge-v2-m3 uv run python scripts/eval_retrieve.py \
   --data-dir /tmp/mp-eval-hard-bge --cases tests/fixtures/eval/eval_hard.json
 ```
 
-LLM analysis is one pass per Material (not per chunk). Default is deterministic. For Ollama or any OpenAI-compatible server:
+LLM analysis is one `MaterialAnalysis` per Material. Small materials are analyzed directly; long documents are reduced hierarchically; projects are inventoried then deep-read (20 files); artifacts use package metadata. Retrieval chunks stay 512/64. Default analyzer is deterministic. For Ollama or any OpenAI-compatible server:
 
 ```bash
 ANALYZER=llm \
@@ -78,6 +78,8 @@ uv run python scripts/research_query.py "handle_request" \
   --data-dir /tmp/mp-simple --material-type project
 uv run python scripts/research_agent.py "handle_request" \
   --data-dir /tmp/mp-simple --trace
+uv run python scripts/research_agent.py "handle_request" \
+  --data-dir /tmp/mp-simple --mode quick
 uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-simple --lexical-only
 uv run python scripts/eval_retrieve.py \
   --source tests/fixtures/eval_long/research.zip \
@@ -91,9 +93,40 @@ That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh
 
 Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`. `tests/` is not indexed.
 
-`--trace` prints the agent span tree and the Langfuse trace URL when keys are set (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`). Nested node spans and named LLM generations go to Langfuse.
+`--trace` prints the agent span tree and the Langfuse trace URL when keys are set (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`). Nested node spans and named LLM generations go to Langfuse. Each `retrieve` span contains `hop1` (5 materials), `hop2` (units in those materials), `rerank` (on or off), `boost` (same-source), and `diversity` (units per material). Outputs are locators and scores, not unit bodies.
 
 A larger dump lives at `tests/fixtures/mixed_zip/research.zip`. Ranking traps live at `tests/fixtures/eval_hard/research.zip`. A long treatise for chunk-size sweeps lives at `tests/fixtures/eval_long/research.zip`.
+
+A real AI/ML corpus (Jurafsky & Martin SLP3 draft, arXiv LLM papers, Hugging Face GitHub trees, PyPI wheels, a DJL JAR) is **not in git**. The ingest pipeline still takes a local path only; the fixture builder downloads first:
+
+```bash
+uv run python scripts/eval_aiml.py --build-only
+uv run python scripts/eval_aiml.py --skip-build --data-dir /tmp/mp-aiml --lexical-only
+EVAL_AIML=1 uv run pytest tests/unit/eval/test_eval_aiml.py -k ingest
+```
+
+The retrieve table is printed to stdout and written to `{data-dir}/eval_aiml_report.txt` (for example `/tmp/mp-aiml/eval_aiml_report.txt`). Re-score an existing sqlite ingest without rebuilding:
+
+```bash
+uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-aiml \
+  --cases tests/fixtures/eval/eval_aiml.json --lexical-only
+```
+
+`--lexical-only` is the cheap gate: sqlite, fake embedder, no reranker, deterministic analysis. Production-style scoring uses compose (Postgres, MinIO, Qdrant, Langfuse) plus BGE-M3, the v2-m3 reranker, and LLM analysis. `.env` still supplies URLs, keys, and `LLM_BASE_URL`; `EMBEDDER` / `RERANKER` / `ANALYZER` are ignored. Vectors go to Qdrant collection `research_aiml` so they are not mixed with the fake-embedder run:
+
+```bash
+docker compose up -d
+uv run python scripts/eval_aiml.py --skip-build --prod --data-dir /tmp/mp-aiml-prod
+```
+
+That run scores lexical and semantic cases, traces the agent on Langfuse, and writes `/tmp/mp-aiml-prod/eval_aiml_report.txt`. Re-score without ingesting again:
+
+```bash
+uv run python scripts/eval_aiml.py --skip-build --prod --skip-ingest \
+  --data-dir /tmp/mp-aiml-prod
+```
+
+SLP3 hierarchical LLM analysis is slow. Cache and `tests/fixtures/eval_aiml/research.zip` are gitignored. SLP3 is class/print use; do not commit the PDF.
 
 ## Dagster pipeline
 
@@ -186,7 +219,7 @@ uv run python scripts/download_bge.py
 uv run python scripts/e2e_research.py
 ```
 
-That ingests `tests/fixtures/simple_mix/research.zip` into Qdrant collection `research_e2e` (so BGE vectors are not mixed with the fake embedder), then runs the agent with `--llm --trace`. Override `--source` / `--query`. `--skip-ingest` reruns only the agent.
+That ingests `tests/fixtures/simple_mix/research.zip` into Qdrant collection `research_e2e` (so BGE vectors are not mixed with the fake embedder), then runs the agent with `--llm --trace`. `.env` still supplies compose URLs, Langfuse keys, and `LLM_BASE_URL`; the script overrides `EMBEDDER` / `RERANKER` / `ANALYZER`. Override `--source` / `--query`. `--skip-ingest` reruns only the agent.
 
 In the Launchpad, point the resource at env-configured Postgres, MinIO, and Qdrant:
 

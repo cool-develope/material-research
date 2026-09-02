@@ -38,6 +38,7 @@ def process_material(
             chunk_tokens=settings.chunk_tokens,
             chunk_overlap_tokens=settings.chunk_overlap_tokens,
             analyzer=make_analyzer(settings),
+            settings=settings,
         ).process(material)
     context.log.info("material %s is %s", material_id, result.material.status.value)
     return str(result.material.material_id)

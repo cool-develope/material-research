@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
 
 _CLIP = 400
@@ -14,7 +14,7 @@ class SpanEvent:
 
 
 class Tracer:
-    def span(self, name: str, **attrs: object) -> Iterator[None]:
+    def span(self, name: str, **attrs: object) -> AbstractContextManager[None]:
         raise NotImplementedError
 
     def event(self, name: str, **attrs: object) -> None:

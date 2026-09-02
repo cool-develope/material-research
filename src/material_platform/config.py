@@ -1,6 +1,15 @@
+import os
 from pathlib import Path
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+
+def in_pytest() -> bool:
+    return "PYTEST_VERSION" in os.environ
 
 
 class Settings(BaseSettings):
@@ -50,10 +59,29 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 120
     analysis_digest_tokens: int = 8192
     analysis_snippet_tokens: int = 256
+    analysis_direct_tokens: int = 20_000
+    analysis_leaf_tokens: int = 10_000
+    analysis_reduce_fanin: int = 8
+    analysis_deep_files: int = 20
+
+    agent_mode: str = "standard"
 
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        if in_pytest():
+            return init_settings, env_settings, file_secret_settings
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
 
 
 def get_settings() -> Settings:

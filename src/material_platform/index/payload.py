@@ -46,9 +46,13 @@ def make_point(
 
 def material_text(research: ResearchMaterial) -> str:
     topics = research.metadata.get("topics")
-    extra = ""
+    keywords = research.metadata.get("keywords")
+    extra_parts: list[str] = []
+    if isinstance(keywords, list):
+        extra_parts.extend(str(item) for item in keywords[:24] if item)
     if isinstance(topics, list):
-        extra = " ".join(str(item) for item in topics[:12] if item)
+        extra_parts.extend(str(item) for item in topics[:12] if item)
+    extra = " ".join(extra_parts)
     summary = research.summary.strip() if research.summary else ""
     return f"{research.title} {summary} {extra}".strip()
 
@@ -137,7 +141,7 @@ def _meta_text(*sources: dict[str, object]) -> str:
             value = source.get(key)
             if isinstance(value, str) and value.strip():
                 parts.append(value.strip())
-        for key in ("dependencies", "modules", "columns", "topics"):
+        for key in ("dependencies", "modules", "columns", "topics", "keywords"):
             value = source.get(key)
             if isinstance(value, list):
                 parts.extend(str(item) for item in value[:24] if item)

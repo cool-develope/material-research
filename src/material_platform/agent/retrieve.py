@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from material_platform.agent.models import (
-    MAX_SELECT_CALLS,
-    MAX_UNITS_PER_MATERIAL,
-    SearchAttempt,
-)
+from material_platform.agent.models import SearchAttempt
 from material_platform.agent.state import AgentState
 from material_platform.agent.trace import Tracer
 from material_platform.domain.citation import Citation
@@ -21,7 +17,7 @@ def retrieve_one(
     *,
     tracer: Tracer,
 ) -> AgentState:
-    if not state.queue or state.select_calls >= MAX_SELECT_CALLS:
+    if not state.queue or state.select_calls >= state.budgets.select_calls:
         state.pending = []
         state.pending_question = ""
         return state
@@ -36,11 +32,12 @@ def retrieve_one(
         state.select_calls += 1
         hits = tuple(
             hit
-            for hit in select(query, limit=20)
-            if hit.citation != MATERIAL_UNIT_ID
-            and "__material__" not in hit.citation
+            for hit in select(query, limit=20, tracer=tracer)
+            if hit.citation != MATERIAL_UNIT_ID and "__material__" not in hit.citation
         )
-        trimmed = _diversity(hits)
+        with tracer.span("diversity", per_material=state.budgets.units_per_material):
+            trimmed = _diversity(hits, per_material=state.budgets.units_per_material)
+            tracer.set_output({"in": len(hits), "kept": len(trimmed)})
         state.pending = list(trimmed)
         state.pending_question = question_id
         current = state.questions[question_id]
@@ -71,19 +68,21 @@ def retrieve_one(
             {
                 "question_id": question_id,
                 "hits": len(trimmed),
-                "citations": [hit.citation for hit in trimmed],
+                "top": trimmed[0].citation if trimmed else None,
             }
         )
     return state
 
 
-def _diversity(hits: tuple[Citation, ...]) -> tuple[Citation, ...]:
+def _diversity(
+    hits: tuple[Citation, ...], *, per_material: int
+) -> tuple[Citation, ...]:
     counts: dict[str, int] = {}
     kept: list[Citation] = []
     for hit in hits:
         key = str(hit.material_id)
         used = counts.get(key, 0)
-        if used >= MAX_UNITS_PER_MATERIAL:
+        if used >= per_material:
             continue
         counts[key] = used + 1
         kept.append(hit)

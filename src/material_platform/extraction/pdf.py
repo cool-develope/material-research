@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from io import BytesIO
 
 from pypdf import PdfReader
@@ -13,6 +14,7 @@ from material_platform.extraction.common import (
 
 
 def extract_pdf(item: MaterialFile) -> tuple[ContentUnit, ...]:
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
     reader = PdfReader(BytesIO(item.data))
     units: list[ContentUnit] = []
     for index, page in enumerate(reader.pages, start=1):

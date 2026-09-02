@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 from material_platform.agent.llm import named_llm
-from material_platform.agent.models import (
-    MAX_EVIDENCE_PER_QUESTION,
-    MAX_TOTAL_EVIDENCE,
-    EvidenceItem,
-)
+from material_platform.agent.models import EvidenceItem
 from material_platform.agent.state import AgentState
 from material_platform.agent.trace import Tracer, clip
 from material_platform.analysis.protocol import LlmClient
@@ -33,8 +29,8 @@ def extract_pending(
         existing = [
             item for item in state.evidence if item.question_id == question_id
         ]
-        room = MAX_EVIDENCE_PER_QUESTION - len(existing)
-        global_room = MAX_TOTAL_EVIDENCE - len(state.evidence)
+        room = state.budgets.evidence_per_question - len(existing)
+        global_room = state.budgets.evidence_total - len(state.evidence)
         take = min(room, global_room, len(items))
         state.evidence.extend(items[:take])
         state.pending = []

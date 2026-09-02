@@ -2,6 +2,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from material_platform.agent.trace import RecordingTracer
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.ingest_source import IngestSourceService
@@ -64,6 +65,43 @@ def test_deep_research_cites_pdf_page_and_api_lines(
     assert "lines " in lines[0].citation
     assert all("__material__" not in hit.citation for hit in pages)
     assert all("__material__" not in hit.citation for hit in lines)
+
+
+def test_select_traces_hop1_hop2_rerank(
+    session: Session,
+    tmp_path: Path,
+    index: IndexService,
+) -> None:
+    _ingest_and_process(session, tmp_path, index)
+    tracer = RecordingTracer()
+    hits = DeepResearchService(session, index).select("handle_request", tracer=tracer)
+    assert hits
+    names = [span.name for span in tracer.spans]
+    assert names == ["embed", "hop1", "hop2", "rerank", "boost"]
+    hop1 = next(span for span in tracer.spans if span.name == "hop1")
+    hop2 = next(span for span in tracer.spans if span.name == "hop2")
+    rerank = next(span for span in tracer.spans if span.name == "rerank")
+    embed = next(span for span in tracer.spans if span.name == "embed")
+    assert hop1.attrs["k"] == 5
+    assert hop1.attrs["level"] == "material"
+    embed_out = embed.attrs["output"]
+    assert isinstance(embed_out, dict)
+    assert embed_out["model"] == "fake"
+    assert embed_out["chars"] > 0
+    hop1_out = hop1.attrs["output"]
+    assert isinstance(hop1_out, dict)
+    assert isinstance(hop1_out["hits"], int)
+    assert hop1_out["hits"] >= 1
+    assert hop1_out["top"]
+    hop2_out = hop2.attrs["output"]
+    assert isinstance(hop2_out, dict)
+    assert "src/api.py" in str(hop2_out["top"])
+    rerank_out = rerank.attrs["output"]
+    assert isinstance(rerank_out, dict)
+    assert rerank_out["enabled"] is False
+    assert rerank_out["docs"] >= 1
+    assert "before" not in rerank_out
+    assert "after" not in rerank_out
 
 
 def test_select_filters_by_material_type(

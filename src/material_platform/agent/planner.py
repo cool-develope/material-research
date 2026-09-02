@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import (
-    MAX_PLAN_QUESTIONS,
     RAW_QUESTION_ID,
     QuestionState,
     ResearchPlan,
@@ -20,7 +19,11 @@ def plan_state(
     client: LlmClient | None = None,
 ) -> AgentState:
     with tracer.span("plan", query=state.query):
-        plan = _llm_plan(state.query, named_llm(client, tracer, "plan"))
+        plan = _llm_plan(
+            state.query,
+            named_llm(client, tracer, "plan"),
+            limit=state.budgets.plan_questions,
+        )
         if plan is None:
             plan = ResearchPlan(
                 objective=state.query,
@@ -28,7 +31,9 @@ def plan_state(
                     ResearchQuestion(id=RAW_QUESTION_ID, question=state.query),
                 ),
             )
-        plan = _ensure_raw(state.query, plan)
+        plan = _ensure_raw(
+            state.query, plan, limit=state.budgets.plan_questions
+        )
         state.plan = plan
         state.questions = {
             item.id: QuestionState(question_id=item.id) for item in plan.questions
@@ -54,8 +59,10 @@ def plan_state(
     return state
 
 
-def _ensure_raw(query: str, plan: ResearchPlan) -> ResearchPlan:
-    questions = list(plan.questions[:MAX_PLAN_QUESTIONS])
+def _ensure_raw(
+    query: str, plan: ResearchPlan, *, limit: int
+) -> ResearchPlan:
+    questions = list(plan.questions[:limit])
     if not questions or questions[0].id != RAW_QUESTION_ID:
         questions.insert(
             0, ResearchQuestion(id=RAW_QUESTION_ID, question=query)
@@ -72,15 +79,17 @@ def _ensure_raw(query: str, plan: ResearchPlan) -> ResearchPlan:
     objective = plan.objective.strip() or query
     return ResearchPlan(
         objective=objective,
-        questions=tuple(unique[: MAX_PLAN_QUESTIONS + 1]),
+        questions=tuple(unique[: limit + 1]),
     )
 
 
-def _llm_plan(query: str, client: LlmClient | None) -> ResearchPlan | None:
+def _llm_plan(
+    query: str, client: LlmClient | None, *, limit: int
+) -> ResearchPlan | None:
     if client is None:
         return None
     prompt = (
-        "Split this research request into at most 6 concrete questions. "
+        f"Split this research request into at most {limit} concrete questions. "
         "Reply JSON: {\"objective\": str, \"questions\": "
         "[{\"id\": \"Q1\", \"question\": str, \"priority\": \"required\", "
         "\"comparative\": bool}]}\n\n"
@@ -116,7 +125,7 @@ def _llm_plan(query: str, client: LlmClient | None) -> ResearchPlan | None:
                 comparative=bool(item.get("comparative")),
             )
         )
-        if len(questions) >= MAX_PLAN_QUESTIONS:
+        if len(questions) >= limit:
             break
     if not questions:
         return None

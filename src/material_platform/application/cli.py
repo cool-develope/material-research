@@ -100,6 +100,7 @@ def _postgres(path: Path, settings: Settings, data_dir: Path, *, process: bool) 
                 chunk_tokens=settings.chunk_tokens,
                 chunk_overlap_tokens=settings.chunk_overlap_tokens,
                 analyzer=make_analyzer(settings),
+                settings=settings,
             )
             items: list[ProcessResult] = []
             for material in result.materials:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from material_platform.agent.budgets import STANDARD, AgentBudgets
 from material_platform.agent.models import (
     EvidenceItem,
     Finding,
@@ -27,6 +28,7 @@ class AgentState:
     pending_question: str = ""
     select_calls: int = 0
     report: ResearchReport | None = None
+    budgets: AgentBudgets = field(default_factory=lambda: STANDARD)
 
 
 def empty_plan(query: str) -> ResearchPlan:
@@ -34,9 +36,9 @@ def empty_plan(query: str) -> ResearchPlan:
     return ResearchPlan(objective=query, questions=(question,))
 
 
-def bootstrap(query: str) -> AgentState:
+def bootstrap(query: str, budgets: AgentBudgets = STANDARD) -> AgentState:
     plan = empty_plan(query)
-    state = AgentState(query=query, plan=plan)
+    state = AgentState(query=query, plan=plan, budgets=budgets)
     state.questions = {
         item.id: QuestionState(question_id=item.id) for item in plan.questions
     }

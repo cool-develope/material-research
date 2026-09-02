@@ -45,6 +45,9 @@ def test_analyze_pdf_extracts_topics() -> None:
     assert "materials" in topics
     assert "introduction" in topics
     assert "Introduction to materials" in analysis.summary
+    assert analysis.keywords
+    assert analysis.coverage.mode == "direct"
+    assert analysis.coverage.ratio == 1.0
 
 
 def test_analyze_python_project_finds_handle_request(tmp_path: Path) -> None:
@@ -67,3 +70,4 @@ def test_analyze_python_project_finds_handle_request(tmp_path: Path) -> None:
     assert entity.kind == "function"
     assert entity.location is not None
     assert entity.location.path == "src/api.py"
+    assert analysis.coverage.mode == "structural_sample"

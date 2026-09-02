@@ -143,6 +143,7 @@ def test_wheel_extractor_summarizes_metadata() -> None:
     assert unit.metadata["version"] == "2.32.3"
     assert unit.metadata["dependencies"] == ["urllib3", "certifi"]
     assert unit.metadata["modules"] == ["requests"]
+    assert unit.metadata["python_files"] == 1
 
 
 def test_npm_tarball_is_one_identity_unit() -> None:

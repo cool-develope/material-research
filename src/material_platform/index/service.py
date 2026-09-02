@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -22,13 +23,28 @@ from material_platform.infrastructure.embedding.factory import make_embedder
 from material_platform.infrastructure.embedding.protocol import Embedder
 from material_platform.infrastructure.qdrant.client import make_qdrant_client
 from material_platform.infrastructure.qdrant.store import QdrantIndexStore
-from material_platform.infrastructure.rerank import Reranker, make_reranker
+from material_platform.infrastructure.rerank import (
+    RERANK_CHARS,
+    Reranker,
+    clip_rerank_text,
+    make_reranker,
+)
+
+_TITLE = 80
 
 
 @dataclass(frozen=True)
 class ScoredEntry:
     entry: IndexEntry
     score: float
+
+
+@dataclass(frozen=True)
+class SearchDetail:
+    hop1: tuple[ScoredEntry, ...]
+    hop2: tuple[ScoredEntry, ...]
+    ranked: tuple[ScoredEntry, ...]
+    reranked: bool
 
 
 MATERIAL_HOP = 5
@@ -63,52 +79,114 @@ class IndexService:
         limit: int = 5,
         material_type: str | None = None,
     ) -> tuple[ScoredEntry, ...]:
+        return self.search_detail(
+            query, limit=limit, material_type=material_type
+        ).ranked
+
+    def search_detail(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        tracer: object | None = None,
+    ) -> SearchDetail:
+        log = tracer if tracer is not None else _NoopLog()
         if not query.strip():
-            return ()
+            return SearchDetail(hop1=(), hop2=(), ranked=(), reranked=False)
         kind = _normalize_type(material_type)
-        embedded = self._embedder.embed(query)
+        model = _model_name(self._embedder)
+        with log.span("embed", model=model, chars=len(query)):
+            embedded = self._embedder.embed(query)
+            log.set_output(
+                {
+                    "model": model,
+                    "chars": len(query),
+                    "dense": len(embedded.dense),
+                    "sparse": len(embedded.sparse_indices),
+                }
+            )
         dense = list(embedded.dense)
         sparse_indices = list(embedded.sparse_indices)
         sparse_values = list(embedded.sparse_values)
-        hop1 = self._store.search(
-            dense=dense,
-            sparse_indices=sparse_indices,
-            sparse_values=sparse_values,
-            limit=MATERIAL_HOP,
-            level=LEVEL_MATERIAL,
-            material_type=kind,
-        )
-        material_ids = _material_ids(hop1)
+        with log.span("hop1", k=MATERIAL_HOP, level="material"):
+            hop1_points = self._store.search(
+                dense=dense,
+                sparse_indices=sparse_indices,
+                sparse_values=sparse_values,
+                limit=MATERIAL_HOP,
+                level=LEVEL_MATERIAL,
+                material_type=kind,
+            )
+            hop1 = _scored_points(hop1_points)
+            log.set_output(_brief_materials(hop1))
+        material_ids = tuple(item.entry.material_id for item in hop1)
         unit_limit = max(limit, UNIT_HOP)
-        if material_ids:
-            hits = self._store.search(
-                dense=dense,
-                sparse_indices=sparse_indices,
-                sparse_values=sparse_values,
-                limit=unit_limit,
-                level=LEVEL_UNIT,
-                material_ids=material_ids,
-                material_type=kind,
+        with log.span("hop2", k=unit_limit, materials=len(hop1), level="unit"):
+            if material_ids:
+                unit_points = self._store.search(
+                    dense=dense,
+                    sparse_indices=sparse_indices,
+                    sparse_values=sparse_values,
+                    limit=unit_limit,
+                    level=LEVEL_UNIT,
+                    material_ids=material_ids,
+                    material_type=kind,
+                )
+            else:
+                unit_points = self._store.search(
+                    dense=dense,
+                    sparse_indices=sparse_indices,
+                    sparse_values=sparse_values,
+                    limit=unit_limit,
+                    level=LEVEL_UNIT,
+                    material_type=kind,
+                )
+            hop2 = tuple(
+                item
+                for item in _scored_points(unit_points)
+                if item.entry.unit_id != MATERIAL_UNIT_ID
             )
-        else:
-            hits = self._store.search(
-                dense=dense,
-                sparse_indices=sparse_indices,
-                sparse_values=sparse_values,
-                limit=unit_limit,
-                level=LEVEL_UNIT,
-                material_type=kind,
+            log.set_output(_brief_units(hop2))
+        reranked = self._reranker is not None and len(hop2) >= 2
+        with log.span(
+            "rerank",
+            enabled=reranked,
+            model=_model_name(self._reranker) if reranked else None,
+            docs=len(hop2),
+        ):
+            ranked = tuple(_rerank(self._reranker, query, list(hop2)))
+            chars = (
+                sum(len(clip_rerank_text(item.entry.content)) for item in hop2)
+                if reranked
+                else 0
             )
-        scored: list[ScoredEntry] = []
-        for hit in hits:
-            entry = _from_payload(hit.id, hit.payload or {})
-            if entry is None or entry.unit_id == MATERIAL_UNIT_ID:
-                continue
-            scored.append(ScoredEntry(entry=entry, score=float(hit.score)))
-        return tuple(_rerank(self._reranker, query, scored))
+            log.set_output(
+                {
+                    "enabled": reranked,
+                    "docs": len(hop2),
+                    "chars": chars,
+                    "cap": RERANK_CHARS if reranked else 0,
+                    "top": _locator(ranked[0].entry) if ranked else None,
+                }
+            )
+        return SearchDetail(hop1=hop1, hop2=hop2, ranked=ranked, reranked=reranked)
 
     def count_for_material(self, material_id: UUID) -> int:
         return self._store.count_material(material_id)
+
+
+def _scored_points(hits: Sequence[object]) -> tuple[ScoredEntry, ...]:
+    scored: list[ScoredEntry] = []
+    for hit in hits:
+        payload = getattr(hit, "payload", None) or {}
+        if not isinstance(payload, dict):
+            continue
+        entry = _from_payload(getattr(hit, "id", None), payload)
+        if entry is None:
+            continue
+        scored.append(ScoredEntry(entry=entry, score=float(getattr(hit, "score", 0.0))))
+    return tuple(scored)
 
 
 def _rerank(
@@ -127,6 +205,50 @@ def _rerank(
     return ranked
 
 
+class _NoopLog:
+    @contextmanager
+    def span(self, name: str, **attrs: object) -> Iterator[None]:
+        yield
+
+    def set_output(self, value: object) -> None:
+        return None
+
+
+def _model_name(obj: object | None) -> str:
+    if obj is None:
+        return ""
+    name = getattr(obj, "model_name", None)
+    if isinstance(name, str) and name:
+        return name
+    return type(obj).__name__
+
+
+def _brief_materials(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
+    top = _clip(hits[0].entry.title) if hits else None
+    return {"hits": len(hits), "top": top}
+
+
+def _brief_units(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
+    top = _locator(hits[0].entry) if hits else None
+    return {"hits": len(hits), "top": top}
+
+
+def _locator(entry: IndexEntry) -> str:
+    path = entry.path or ""
+    if entry.page is not None:
+        return f"{path} page {entry.page}"
+    if entry.line_start is not None and entry.line_end is not None:
+        return f"{path} lines {entry.line_start}-{entry.line_end}"
+    return path or entry.title
+
+
+def _clip(text: str) -> str:
+    stripped = " ".join(text.split())
+    if len(stripped) <= _TITLE:
+        return stripped
+    return stripped[: _TITLE - 1] + "…"
+
+
 def _normalize_type(value: str | None) -> str | None:
     if value is None or not value.strip():
         return None
@@ -135,27 +257,6 @@ def _normalize_type(value: str | None) -> str | None:
     if kind not in allowed:
         raise ValueError(f"unknown material_type: {value}")
     return kind
-
-
-def _material_ids(hits: Sequence[object]) -> tuple[UUID, ...]:
-    found: list[UUID] = []
-    seen: set[UUID] = set()
-    for hit in hits:
-        payload = getattr(hit, "payload", None) or {}
-        if not isinstance(payload, dict):
-            continue
-        raw = payload.get("material_id")
-        if not isinstance(raw, str):
-            continue
-        try:
-            material_id = UUID(raw)
-        except ValueError:
-            continue
-        if material_id in seen:
-            continue
-        seen.add(material_id)
-        found.append(material_id)
-    return tuple(found)
 
 
 def make_index_service(settings: Settings) -> IndexService:

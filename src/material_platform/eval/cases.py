@@ -13,6 +13,7 @@ _REPO = Path(__file__).resolve().parents[3]
 DEFAULT_SUITE = _REPO / "tests" / "fixtures" / "eval" / "simple_mix.json"
 HARD_SUITE = _REPO / "tests" / "fixtures" / "eval" / "eval_hard.json"
 LONG_SUITE = _REPO / "tests" / "fixtures" / "eval" / "eval_long.json"
+AIML_SUITE = _REPO / "tests" / "fixtures" / "eval" / "eval_aiml.json"
 
 
 class ExpectedHit(Contract):

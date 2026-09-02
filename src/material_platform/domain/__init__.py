@@ -1,4 +1,8 @@
-from material_platform.domain.analysis import AnalyzedEntity, MaterialAnalysis
+from material_platform.domain.analysis import (
+    AnalysisCoverage,
+    AnalyzedEntity,
+    MaterialAnalysis,
+)
 from material_platform.domain.artifact import MaterialArtifact
 from material_platform.domain.base import Contract
 from material_platform.domain.citation import Citation
@@ -31,6 +35,7 @@ from material_platform.domain.research_material import (
 from material_platform.domain.source import Source
 
 __all__ = [
+    "AnalysisCoverage",
     "AnalyzedEntity",
     "BoundaryEvidence",
     "Citation",

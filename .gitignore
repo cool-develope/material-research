@@ -16,3 +16,8 @@ htmlcov/
 
 # Architecture notes at the repo root — not the Python package.
 /research/
+
+# Downloaded AI/ML eval corpus (PDFs, GitHub trees, wheels). Do not commit.
+/tests/fixtures/eval_aiml/cache/
+/tests/fixtures/eval_aiml/research.zip
+/tests/fixtures/eval_aiml/eval_aiml.json

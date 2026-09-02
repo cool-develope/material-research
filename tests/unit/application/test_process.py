@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
+from material_platform.analysis.profile import PROFILE_VERSION
 from material_platform.application import ProcessMaterialService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.tree import format_location
@@ -85,6 +86,9 @@ def test_process_pdf_produces_page_locations(
     )
     assert store.exists(
         material_artifact(material.material_id, "analysis", ANALYZER_VERSION)
+    )
+    assert store.exists(
+        material_artifact(material.material_id, "analysis_profile", PROFILE_VERSION)
     )
 
 

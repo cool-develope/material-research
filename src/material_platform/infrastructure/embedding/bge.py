@@ -23,6 +23,7 @@ class BgeM3Embedder:
                 "uv pip install FlagEmbedding"
             ) from exc
         use_cuda = torch.cuda.is_available()
+        self.model_name = model_name
         self._model = BGEM3FlagModel(
             model_name,
             use_fp16=use_cuda,

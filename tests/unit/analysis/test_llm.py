@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from material_platform.analysis.factory import make_analyzer
@@ -7,7 +9,10 @@ from material_platform.analysis.openai_compat import (
     _chat_body,
     _parse_json,
 )
+from material_platform.classification import classify_files
 from material_platform.config import Settings
+from material_platform.extraction import MaterialFile, extract_units
+from tests.unit.discovery.artifacts import write_wheel
 from tests.unit.helpers.analysis import (
     StubLlm,
     document_decision,
@@ -33,10 +38,14 @@ def test_llm_analyzer_keeps_extracted_title_and_one_summary() -> None:
     assert analysis.analyzer == LLM_ANALYZER
     assert analysis.title == "Survey of Alloys"
     assert analysis.summary == "A survey of alloys for research use."
-    assert "alloys" in analysis.topics
-    assert analysis.digest_units == 2
-    assert analysis.omitted_units == 0
+    assert "alloys" in {item.lower() for item in analysis.topics}
+    assert analysis.coverage.mode == "direct"
+    assert analysis.coverage.analyzed_units == 2
+    assert analysis.coverage.total_units == 2
+    assert analysis.coverage.ratio == 1.0
     assert len(units) == 2
+    assert "materials" in {item.lower() for item in analysis.keywords}
+    assert "unicorn" not in {item.lower() for item in analysis.keywords}
     assert stub.prompts and "as a whole" in stub.prompts[0]
 
 
@@ -71,3 +80,24 @@ def test_openai_compat_joins_v1_chat_completions() -> None:
 def test_openai_compat_disables_thinking() -> None:
     body = _chat_body("qwen3.5:0.8b", "hello")
     assert body["reasoning_effort"] == "none"
+
+
+def test_llm_artifact_prompt_uses_metadata_only(tmp_path: Path) -> None:
+    wheel = write_wheel(tmp_path / "requests-2.32.3-py3-none-any.whl")
+    files = (MaterialFile(path=wheel.name, data=wheel.read_bytes()),)
+    decision = classify_files(tuple(item.path for item in files))
+    units = extract_units(decision, files)
+    stub = StubLlm()
+    analyzer = make_analyzer(
+        Settings(
+            _env_file=None, analyzer="llm", llm_base_url="http://example.invalid/v1"
+        ),
+        client=stub,
+    )
+    analysis = analyzer.analyze(fake_material(wheel.name), decision, units, files=files)
+    assert analysis.coverage.mode == "artifact_metadata"
+    assert stub.prompts
+    prompt = stub.prompts[0]
+    assert "metadata only" in prompt
+    assert "x = 1" not in prompt
+    assert len(stub.prompts) == 1

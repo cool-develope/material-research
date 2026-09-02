@@ -104,6 +104,14 @@ def test_langfuse_v2_nests_spans_and_generations() -> None:
         with tracer.span("plan"):
             tracer.generation("plan", "split questions", '{"ok": true}')
         with tracer.span("retrieve", question_id="Q0"):
+            with tracer.span("embed", model="fake", chars=14):
+                tracer.set_output({"model": "fake", "chars": 14})
+            with tracer.span("hop1", k=5):
+                tracer.set_output({"hits": 1, "top": "paper.pdf"})
+            with tracer.span("hop2", k=20):
+                tracer.set_output({"hits": 1, "top": "paper.pdf page 1"})
+            with tracer.span("rerank", enabled=False):
+                tracer.set_output({"enabled": False, "docs": 1, "chars": 0})
             tracer.event("select", hits=1, query="handle_request")
     tracer.flush()
     root = client.root
@@ -112,6 +120,13 @@ def test_langfuse_v2_nests_spans_and_generations() -> None:
     assert names[0] == "deep-research"
     nested = [child.name for child in root.children[0].children]
     assert nested == ["plan", "retrieve"]
+    retrieve = root.children[0].children[1]
+    assert [child.name for child in retrieve.children] == [
+        "embed",
+        "hop1",
+        "hop2",
+        "rerank",
+    ]
     assert "plan" in root.children[0].children[0].generations
     assert "select" in root.children[0].children[1].events
     assert tracer.trace_url() == "https://cloud.langfuse.com/trace/v2-example"

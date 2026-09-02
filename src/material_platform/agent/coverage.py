@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import (
-    MAX_SELECT_CALLS,
     RAW_QUESTION_ID,
     QuestionState,
 )
@@ -73,7 +72,7 @@ def follow_up_state(
 
 
 def has_work(state: AgentState) -> bool:
-    return bool(state.queue) and state.select_calls < MAX_SELECT_CALLS
+    return bool(state.queue) and state.select_calls < state.budgets.select_calls
 
 
 def _status(

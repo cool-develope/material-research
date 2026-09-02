@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from material_platform.config import Settings
+from material_platform.config import Settings, in_pytest
 
 
 def test_settings_defaults_match_local_dev() -> None:
@@ -29,8 +29,24 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.llm_model == "llama3.1"
     assert settings.analysis_digest_tokens == 8192
     assert settings.analysis_snippet_tokens == 256
+    assert settings.analysis_direct_tokens == 20_000
+    assert settings.analysis_leaf_tokens == 10_000
+    assert settings.analysis_reduce_fanin == 8
+    assert settings.analysis_deep_files == 20
+    assert settings.agent_mode == "standard"
     assert settings.langfuse_public_key is None
     assert settings.langfuse_host.startswith("https://")
+
+
+def test_pytest_ignores_dotenv() -> None:
+    assert in_pytest()
+    settings = Settings()
+    assert settings.embedder == "fake"
+    assert settings.reranker == "off"
+    assert settings.analyzer == "deterministic"
+    assert settings.agent_mode == "standard"
+    assert settings.langfuse_public_key is None
+    assert settings.llm_model == "llama3.1"
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,8 +55,10 @@ def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "postgresql+psycopg://user:pass@db:5432/app",
     )
     monkeypatch.setenv("MAX_ARCHIVE_DEPTH", "2")
+    monkeypatch.setenv("AGENT_MODE", "deep")
 
     settings = Settings(_env_file=None)
 
     assert settings.database_url == "postgresql+psycopg://user:pass@db:5432/app"
     assert settings.max_archive_depth == 2
+    assert settings.agent_mode == "deep"

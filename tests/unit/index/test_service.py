@@ -228,3 +228,7 @@ def test_reranker_reorders_hop2() -> None:
     hits = index.search("alpha")
     assert hits
     assert hits[0].entry.page == 2
+    detail = index.search_detail("alpha")
+    assert detail.reranked
+    assert len(detail.hop2) == len(detail.ranked)
+    assert detail.ranked[0].entry.page == 2

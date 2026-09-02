@@ -52,20 +52,34 @@ def sqlite_settings(settings: Settings, data_dir: Path) -> Settings:
     )
 
 
+def uses_postgres(settings: Settings) -> bool:
+    return settings.database_url.startswith("postgresql")
+
+
 def ingest_and_process(
     path: Path,
     settings: Settings,
     *,
     process: bool = True,
     strict: bool = True,
+    progress: bool | None = None,
 ) -> LocalIngest:
     data_dir = settings.workspace_root
-    store = make_object_store(settings, filesystem_root=data_dir / "store")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    postgres = uses_postgres(settings)
+    store = (
+        make_object_store(settings)
+        if postgres
+        else make_object_store(settings, filesystem_root=data_dir / "store")
+    )
     engine = make_engine(settings)
-    Base.metadata.create_all(engine)
+    if not postgres:
+        Base.metadata.create_all(engine)
     sessions = make_session_factory(engine)
     workspace = TemporaryWorkspace(data_dir)
     processed: tuple[ProcessResult, ...] = ()
+    if progress is None:
+        progress = sys.stderr.isatty()
     with sessions() as session:
         ingest = IngestSourceService.create(
             session,
@@ -75,6 +89,12 @@ def ingest_and_process(
             max_archive_depth=settings.max_archive_depth,
             archive_limits=ArchiveLimits.from_settings(settings),
         ).ingest(path)
+        if progress:
+            print(
+                f"discovered {len(ingest.materials)} materials",
+                flush=True,
+                file=sys.stderr,
+            )
         if process:
             index = make_index_service(settings)
             processor = ProcessMaterialService(
@@ -87,9 +107,17 @@ def ingest_and_process(
                 chunk_tokens=settings.chunk_tokens,
                 chunk_overlap_tokens=settings.chunk_overlap_tokens,
                 analyzer=make_analyzer(settings),
+                settings=settings,
             )
             items: list[ProcessResult] = []
-            for material in ingest.materials:
+            total = len(ingest.materials)
+            for step, material in enumerate(ingest.materials, start=1):
+                if progress:
+                    print(
+                        f"process {step}/{total} {material.root_path}",
+                        flush=True,
+                        file=sys.stderr,
+                    )
                 try:
                     items.append(processor.process(material))
                 except Exception as exc:

@@ -13,6 +13,8 @@ _SPARSE_DIM = 250_002
 
 
 class FakeEmbedder:
+    model_name = "fake"
+
     def embed(self, text: str) -> EmbeddedText:
         tokens = tokenize(text)
         dense = _dense(tokens)

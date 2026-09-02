@@ -1,8 +1,9 @@
 from material_platform.eval.cases import (
+    AIML_SUITE,
     DEFAULT_SUITE,
     HARD_SUITE,
-    LONG_SUITE,
     LEXICAL,
+    LONG_SUITE,
     SEMANTIC,
     EvalCase,
     EvalSuite,
@@ -22,6 +23,7 @@ from material_platform.eval.score import (
 )
 
 __all__ = [
+    "AIML_SUITE",
     "DEFAULT_SUITE",
     "HARD_SUITE",
     "LONG_SUITE",

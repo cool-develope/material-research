@@ -32,6 +32,9 @@ EVAL_HARD_ZIP = (
 EVAL_LONG_ZIP = (
     Path(__file__).resolve().parents[2] / "fixtures" / "eval_long" / "research.zip"
 )
+EVAL_AIML_ZIP = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "eval_aiml" / "research.zip"
+)
 
 
 def make_go_project(path: Path) -> Path:

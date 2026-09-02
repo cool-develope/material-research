@@ -6,3 +6,12 @@ def test_research_agent_cli_missing_db(tmp_path, capsys) -> None:
     captured = capsys.readouterr()
     assert code == 1
     assert "database not found" in captured.err
+
+
+def test_research_agent_cli_accepts_mode(tmp_path, capsys) -> None:
+    code = main(
+        ["handle_request", "--data-dir", str(tmp_path / "missing"), "--mode", "quick"]
+    )
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "database not found" in captured.err

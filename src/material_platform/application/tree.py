@@ -58,7 +58,7 @@ def format_process_report(
             f"{label} {research.title}  {research.material_type.value}  "
             f"{count} {noun}  {research.summary}"
         )
-        keywords = _keywords_line(result.analysis.topics)
+        keywords = _keywords_line(result.analysis.keywords, result.analysis.topics)
         if keywords is not None:
             lines.append(keywords)
         lines.extend(_location_lines(research.content_units))
@@ -87,8 +87,12 @@ def _location_lines(units: tuple[ContentUnit, ...]) -> list[str]:
     return [f"    {first} … {last}"]
 
 
-def _keywords_line(topics: tuple[str, ...]) -> str | None:
-    names = [item.strip() for item in topics if item.strip()]
+def _keywords_line(
+    keywords: tuple[str, ...], topics: tuple[str, ...]
+) -> str | None:
+    names = [item.strip() for item in keywords if item.strip()]
+    if not names:
+        names = [item.strip() for item in topics if item.strip()]
     if not names:
         return None
     return f"    keywords: {', '.join(names[:12])}"

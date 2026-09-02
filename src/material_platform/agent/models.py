@@ -3,14 +3,15 @@ from __future__ import annotations
 from typing import Literal
 from uuid import UUID
 
+from material_platform.agent.budgets import STANDARD
 from material_platform.domain.base import Contract
 from material_platform.domain.citation import Citation
 
-MAX_PLAN_QUESTIONS = 6
-MAX_SELECT_CALLS = 8
-MAX_UNITS_PER_MATERIAL = 5
-MAX_EVIDENCE_PER_QUESTION = 20
-MAX_TOTAL_EVIDENCE = 80
+MAX_PLAN_QUESTIONS = STANDARD.plan_questions
+MAX_SELECT_CALLS = STANDARD.select_calls
+MAX_UNITS_PER_MATERIAL = STANDARD.units_per_material
+MAX_EVIDENCE_PER_QUESTION = STANDARD.evidence_per_question
+MAX_TOTAL_EVIDENCE = STANDARD.evidence_total
 RAW_QUESTION_ID = "Q0"
 
 QuestionStatus = Literal["pending", "researching", "covered", "gap", "unresolved"]

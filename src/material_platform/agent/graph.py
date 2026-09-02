@@ -4,11 +4,12 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from material_platform.agent.budgets import STANDARD, AgentBudgets
 from material_platform.agent.coverage import cover_state, follow_up_state, has_work
 from material_platform.agent.extract import extract_pending
 from material_platform.agent.findings import build_findings
 from material_platform.agent.langfuse_trace import langfuse_handler
-from material_platform.agent.models import MAX_SELECT_CALLS, ResearchReport
+from material_platform.agent.models import ResearchReport
 from material_platform.agent.planner import plan_state
 from material_platform.agent.retrieve import SelectFn, retrieve_one
 from material_platform.agent.state import AgentState, bootstrap
@@ -29,12 +30,15 @@ def run_agent(
     *,
     tracer: Tracer,
     client: LlmClient | None = None,
+    budgets: AgentBudgets = STANDARD,
 ) -> AgentState:
     compiled = _compile(select, tracer=tracer, client=client)
-    with tracer.span("deep-research", query=query, runtime="langgraph"):
+    with tracer.span(
+        "deep-research", query=query, runtime="langgraph", mode=budgets.mode
+    ):
         result = compiled.invoke(
-            {"state": bootstrap(query)},
-            config=_config(query, tracer),
+            {"state": bootstrap(query, budgets)},
+            config=_config(query, tracer, budgets),
         )
         state = result["state"]
         tracer.event(
@@ -127,7 +131,9 @@ def _compile(
     return graph.compile()
 
 
-def _config(query: str, tracer: Tracer) -> dict[str, object]:
+def _config(
+    query: str, tracer: Tracer, budgets: AgentBudgets
+) -> dict[str, object]:
     callbacks: list[object] = []
     if _has_langfuse(tracer):
         handler = langfuse_handler(
@@ -138,12 +144,13 @@ def _config(query: str, tracer: Tracer) -> dict[str, object]:
     session = getattr(tracer, "_session_id", None)
     return {
         "run_name": "deep-research",
-        "recursion_limit": MAX_SELECT_CALLS * 5 + 16,
+        "recursion_limit": budgets.select_calls * 5 + 16,
         "callbacks": callbacks,
         "metadata": {
             "query": clip(query),
             "langfuse_session_id": session or "",
             "langfuse_tags": ["deep-research"],
+            "agent_mode": budgets.mode,
         },
     }
 

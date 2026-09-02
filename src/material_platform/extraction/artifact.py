@@ -62,13 +62,17 @@ def _wheel(
     version = _header(text, "Version") or ""
     summary = _header(text, "Summary") or ""
     requires = [_req_name(item) for item in _headers(text, "Requires-Dist")]
-    modules = _wheel_modules(archive.namelist())
+    names = archive.namelist()
+    modules = _wheel_modules(names)
+    entry_points = _wheel_entry_points(archive, names)
+    python_files = sum(1 for item in names if item.endswith(".py"))
     fields: dict[str, object] = {
         "format": kind,
         "filename": stem,
         "package": name,
         "title": f"{name} {version}".strip(),
         "version": version,
+        "python_files": python_files,
     }
     if summary:
         fields["summary"] = summary
@@ -76,6 +80,8 @@ def _wheel(
         fields["dependencies"] = requires[:30]
     if modules:
         fields["modules"] = modules[:20]
+    if entry_points:
+        fields["entry_points"] = entry_points[:20]
     return fields, _render(f"Python wheel {fields['title']}", fields)
 
 
@@ -103,6 +109,11 @@ def _jar(archive: ZipFile, kind: str, stem: str) -> tuple[dict[str, object], str
     }
     if packages:
         fields["modules"] = packages[:20]
+    class_count = sum(1 for item in names if item.endswith(".class"))
+    fields["class_count"] = class_count
+    main_class = _header(text, "Main-Class")
+    if main_class:
+        fields["entry_points"] = [main_class]
     return fields, _render(f"Java archive {label}", fields)
 
 
@@ -140,6 +151,16 @@ def _npm(data: bytes, stem: str) -> tuple[dict[str, object], str]:
         fields["summary"] = summary
     if deps:
         fields["dependencies"] = deps[:30]
+    raw_keywords = payload.get("keywords")
+    if isinstance(raw_keywords, list):
+        fields["keywords"] = [
+            str(item) for item in raw_keywords if isinstance(item, str)
+        ][:20]
+    bin_field = payload.get("bin")
+    if isinstance(bin_field, dict):
+        fields["entry_points"] = [str(item) for item in bin_field][:12]
+    elif isinstance(bin_field, str):
+        fields["entry_points"] = [bin_field]
     return fields, _render(f"npm package {label}", fields)
 
 
@@ -162,6 +183,24 @@ def _npm_json(data: bytes) -> str | None:
             return member.read().decode("utf-8", errors="replace")
     except (TarError, OSError):
         return None
+
+
+def _wheel_entry_points(archive: ZipFile, names: list[str]) -> list[str]:
+    path = next(
+        (name for name in names if name.endswith(".dist-info/entry_points.txt")),
+        None,
+    )
+    if path is None:
+        return []
+    text = archive.read(path).decode("utf-8", errors="replace")
+    found: list[str] = []
+    for line in text.splitlines():
+        if "=" not in line or line.startswith("[") or line.startswith("#"):
+            continue
+        name = line.split("=", maxsplit=1)[0].strip()
+        if name:
+            found.append(name)
+    return found
 
 
 def _wheel_modules(names: tuple[str, ...] | list[str]) -> list[str]:
@@ -194,7 +233,17 @@ def _jar_packages(names: list[str]) -> list[str]:
 
 def _render(headline: str, fields: dict[str, object]) -> str:
     lines = [headline]
-    for key in ("package", "version", "summary", "dependencies", "modules"):
+    for key in (
+        "package",
+        "version",
+        "summary",
+        "dependencies",
+        "modules",
+        "entry_points",
+        "keywords",
+        "python_files",
+        "class_count",
+    ):
         value = fields.get(key)
         if not value:
             continue

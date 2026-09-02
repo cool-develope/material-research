@@ -1,12 +1,14 @@
 from material_platform.analysis.deterministic import DeterministicAnalyzer
 from material_platform.analysis.llm import LlmAnalyzer
 from material_platform.analysis.openai_compat import OpenAICompatClient
+from material_platform.analysis.profile import MaterialProfile
 from material_platform.analysis.protocol import Analyzer, LlmClient
 from material_platform.classification.deterministic import ClassificationDecision
 from material_platform.config import Settings
 from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentUnit
+from material_platform.extraction.common import MaterialFile
 
 
 class FallbackAnalyzer:
@@ -19,15 +21,22 @@ class FallbackAnalyzer:
         material: Material,
         decision: ClassificationDecision,
         units: tuple[ContentUnit, ...],
+        *,
+        files: tuple[MaterialFile, ...] = (),
+        profile: MaterialProfile | None = None,
     ) -> MaterialAnalysis:
         try:
-            return self._primary.analyze(material, decision, units)
+            return self._primary.analyze(
+                material, decision, units, files=files, profile=profile
+            )
         except Exception:
-            return self._fallback.analyze(material, decision, units)
+            return self._fallback.analyze(
+                material, decision, units, files=files, profile=profile
+            )
 
 
 def make_analyzer(settings: Settings, *, client: LlmClient | None = None) -> Analyzer:
-    fallback = DeterministicAnalyzer()
+    fallback = DeterministicAnalyzer(settings)
     kind = settings.analyzer.strip().lower()
     if kind in {"", "deterministic"}:
         return fallback

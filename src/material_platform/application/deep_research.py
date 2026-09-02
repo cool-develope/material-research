@@ -2,9 +2,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from material_platform.agent.trace import NoOpTracer, Tracer
 from material_platform.application.tree import format_location
 from material_platform.domain.citation import Citation
 from material_platform.domain.enums import MaterialStatus
+from material_platform.domain.index_entry import IndexEntry
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation
 from material_platform.index import IndexService
@@ -34,13 +36,24 @@ class DeepResearchService:
         *,
         limit: int = 5,
         material_type: str | None = None,
+        tracer: Tracer | None = None,
     ) -> tuple[Citation, ...]:
-        hits = self._index.search(
-            query, limit=max(limit, 5), material_type=material_type
+        log = tracer or NoOpTracer()
+        detail = self._index.search_detail(
+            query, limit=max(limit, 5), material_type=material_type, tracer=log
         )
-        hits = tuple(hit for hit in hits if hit.entry.unit_id != MATERIAL_UNIT_ID)
+        hits = tuple(
+            hit for hit in detail.ranked if hit.entry.unit_id != MATERIAL_UNIT_ID
+        )
         loaded = _load_materials(self._materials, hits)
-        hits = _boost_same_source(hits, loaded)[:limit]
+        with log.span("boost", same_source=_SOURCE_BOOST):
+            hits = _boost_same_source(hits, loaded)[:limit]
+            log.set_output(
+                {
+                    "hits": len(hits),
+                    "top": format_location(_location(hits[0].entry)) if hits else None,
+                }
+            )
         return tuple(_citation(hit, loaded, self._materials) for hit in hits)
 
 
@@ -81,18 +94,22 @@ def _boost_same_source(
     return tuple(boosted)
 
 
+def _location(entry: IndexEntry) -> ContentLocation:
+    return ContentLocation(
+        path=entry.path,
+        page=entry.page,
+        line_start=entry.line_start,
+        line_end=entry.line_end,
+        section=entry.section,
+    )
+
+
 def _citation(
     hit: ScoredEntry,
     loaded: dict[UUID, Material],
     repo: MaterialRepository,
 ) -> Citation:
-    location = ContentLocation(
-        path=hit.entry.path,
-        page=hit.entry.page,
-        line_start=hit.entry.line_start,
-        line_end=hit.entry.line_end,
-        section=hit.entry.section,
-    )
+    location = _location(hit.entry)
     material = loaded.get(hit.entry.material_id)
     return Citation(
         material_id=hit.entry.material_id,

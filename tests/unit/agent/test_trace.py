@@ -41,9 +41,7 @@ def test_named_generations_match_graph_nodes() -> None:
                 }
             if "Extract evidence" in prompt:
                 return {
-                    "items": [
-                        {"index": 1, "finding": "oauth", "stance": "supports"}
-                    ]
+                    "items": [{"index": 1, "finding": "oauth", "stance": "supports"}]
                 }
             if "Rewrite this section" in prompt:
                 return {"body": "oauth (src/api.py lines 1-2)"}
@@ -68,4 +66,3 @@ def test_named_generations_match_graph_nodes() -> None:
     names = [item.name for item in tracer.generations]
     for required in ("plan", "extract", "write", "summary"):
         assert required in names
-

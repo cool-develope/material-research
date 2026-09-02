@@ -31,6 +31,13 @@ def test_agent_simple_mix_handle_request(
     assert any("src/api.py" in item.citation for item in report.citations)
     assert all("__material__" not in item.citation for item in report.citations)
     assert "plan" in [span.name for span in tracer.spans]
+    names = [span.name for span in tracer.spans]
+    assert "retrieve" in names
+    assert "embed" in names
+    assert "hop1" in names
+    assert "hop2" in names
+    assert "rerank" in names
+    assert "diversity" in names
 
 
 def test_agent_eval_hard_lexical_hit_at_1(

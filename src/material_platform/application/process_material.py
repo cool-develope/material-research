@@ -9,6 +9,11 @@ from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 
 from material_platform.analysis import Analyzer, DeterministicAnalyzer
+from material_platform.analysis.profiler import (
+    PROFILE_PROCESSOR,
+    PROFILE_VERSION,
+    build_profile,
+)
 from material_platform.application.content import load_material_files
 from material_platform.application.queue import WorkQueue
 from material_platform.classification import (
@@ -16,6 +21,7 @@ from material_platform.classification import (
     CLASSIFIER_VERSION,
     classify_files,
 )
+from material_platform.config import Settings
 from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.artifact import MaterialArtifact
 from material_platform.domain.classification import MaterialClassification
@@ -72,6 +78,7 @@ class ProcessMaterialService:
         chunk_tokens: int = 512,
         chunk_overlap_tokens: int = 64,
         analyzer: Analyzer | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self._session = session
         self._store = store
@@ -80,7 +87,8 @@ class ProcessMaterialService:
         self._max_units = max_units_per_material
         self._chunk_tokens = chunk_tokens
         self._chunk_overlap = chunk_overlap_tokens
-        self._analyzer = analyzer or DeterministicAnalyzer()
+        self._settings = settings
+        self._analyzer = analyzer or DeterministicAnalyzer(settings)
         self._sources = SourceRepository(session)
         self._materials = MaterialRepository(session)
         self._classifications = ClassificationRepository(session)
@@ -180,7 +188,19 @@ class ProcessMaterialService:
         )
         material = self._set_status(material, MaterialStatus.EXTRACTED)
 
-        analysis = self._analyzer.analyze(material, decision, units)
+        profile = build_profile(
+            material, decision, units, files=files, settings=self._settings
+        )
+        self._store_json(
+            material.material_id,
+            artifact_type="analysis_profile",
+            processor=PROFILE_PROCESSOR,
+            processor_version=PROFILE_VERSION,
+            payload=profile.as_dict(),
+        )
+        analysis = self._analyzer.analyze(
+            material, decision, units, files=files, profile=profile
+        )
         self._store_json(
             material.material_id,
             artifact_type="analysis",
