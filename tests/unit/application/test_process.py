@@ -307,12 +307,18 @@ def test_process_go_project_cites_source_lines(
     assert processed.classification.material_type is MaterialType.PROJECT
     assert processed.classification.subtype == "go"
     assert processed.material.status is MaterialStatus.READY
-    locations = {
-        (unit.location.path, unit.location.line_start, unit.location.line_end)
+    go = [
+        unit
         for unit in processed.research.content_units
-    }
-    assert ("main.go", 1, 5) in locations
-    assert any(path == "go.mod" for path, _start, _end in locations)
+        if unit.location.path == "main.go"
+    ]
+    handler = next(unit for unit in go if unit.location.section == "HandleRequest")
+    assert handler.location.line_start == 3
+    assert handler.location.line_end == 5
+    assert handler.metadata.get("strategy") == "code.symbol"
+    assert any(
+        unit.location.path == "go.mod" for unit in processed.research.content_units
+    )
 
 
 def test_process_nested_dataset_and_installer_siblings_ready(

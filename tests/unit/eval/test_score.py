@@ -6,6 +6,7 @@ from material_platform.eval import (
     DEFAULT_SUITE,
     HARD_SUITE,
     LEXICAL,
+    LONG_SUITE,
     SEMANTIC,
     EvalCase,
     ExpectedHit,
@@ -95,6 +96,13 @@ def test_load_hard_suite() -> None:
     assert sum(1 for case in suite.cases if case.mode == SEMANTIC) == 3
 
 
+def test_load_long_suite() -> None:
+    suite = load_suite(LONG_SUITE)
+    assert suite.id == "eval_long"
+    assert all(case.mode == LEXICAL for case in suite.cases)
+    assert len(suite.cases) == 3
+
+
 def test_score_case_hit_at_1() -> None:
     case = EvalCase(
         id="api",
@@ -118,6 +126,31 @@ def test_score_case_hit_at_1() -> None:
 
     scored = score_case(case, select)
     assert scored.hit_at_1
+    assert scored.rank == 1
+    assert scored.recall_at_k == 1.0
+
+
+def test_score_case_records_rank_when_not_first() -> None:
+    case = EvalCase(
+        id="api",
+        query="handle_request",
+        expect=(ExpectedHit(path="src/api.py", lines=True),),
+    )
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+    ) -> tuple[Citation, ...]:
+        return (
+            _citation("paper.pdf", page=1),
+            _citation("src/api.py", line_start=1, line_end=2),
+        )
+
+    scored = score_case(case, select)
+    assert not scored.hit_at_1
+    assert scored.rank == 2
     assert scored.recall_at_k == 1.0
 
 

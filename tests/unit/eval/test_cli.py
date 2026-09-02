@@ -20,3 +20,26 @@ def test_eval_retrieve_cli_scores_simple_mix(
     assert code == 0
     assert "lexical 3/3 hit@1" in captured.out
     assert "ok  api-handler" in captured.out
+
+
+def test_eval_retrieve_cli_sweeps_chunk_tokens(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = eval_main(
+        [
+            "--source",
+            str(SIMPLE_ZIP),
+            "--sweep",
+            "chunk_tokens=64,512",
+            "--work-dir",
+            str(tmp_path / "sweep"),
+            "--lexical-only",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "chunk_tokens=64" in captured.out
+    assert "chunk_tokens=512" in captured.out
+    assert "lex@1" in captured.out
+    assert "units" in captured.out

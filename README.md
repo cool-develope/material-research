@@ -76,14 +76,24 @@ uv run python scripts/research_query.py "handle_request" \
   --data-dir /tmp/mp-simple
 uv run python scripts/research_query.py "handle_request" \
   --data-dir /tmp/mp-simple --material-type project
+uv run python scripts/research_agent.py "handle_request" \
+  --data-dir /tmp/mp-simple --trace
 uv run python scripts/eval_retrieve.py --data-dir /tmp/mp-simple --lexical-only
+uv run python scripts/eval_retrieve.py \
+  --source tests/fixtures/eval_long/research.zip \
+  --cases tests/fixtures/eval/eval_long.json \
+  --sweep chunk_tokens=256,512,1024 \
+  --work-dir /tmp/mp-chunk-sweep \
+  --lexical-only
 ```
 
 That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
 
 Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`. `tests/` is not indexed.
 
-A larger dump lives at `tests/fixtures/mixed_zip/research.zip`. Ranking traps live at `tests/fixtures/eval_hard/research.zip`.
+`--trace` prints the agent span tree and the Langfuse trace URL when keys are set (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`). Nested node spans and named LLM generations go to Langfuse.
+
+A larger dump lives at `tests/fixtures/mixed_zip/research.zip`. Ranking traps live at `tests/fixtures/eval_hard/research.zip`. A long treatise for chunk-size sweeps lives at `tests/fixtures/eval_long/research.zip`.
 
 ## Dagster pipeline
 
@@ -156,12 +166,27 @@ ops:
 
 Successful process runs mark the material `READY`. Failures mark it `FAILED`; a later run can claim and retry that material alone. Siblings are not re-queued.
 
-### Optional: Postgres, MinIO, and Qdrant
+### Optional: Postgres, MinIO, Qdrant, and Langfuse
 
 ```bash
 docker compose up -d
 uv run alembic upgrade head
 ```
+
+Langfuse reuses the same Postgres (`langfuse` database) and MinIO (`langfuse` bucket). UI: [http://localhost:3100](http://localhost:3100) (Dagster stays on 3000). Login `langfuse@example.com` / `langfuselocal`. Copy `.env.example` keys (`pk-lf-local` / `sk-lf-local`) so the agent ships traces.
+
+Production-like path (Postgres, MinIO, Qdrant, BGE-M3, reranker, LLM analysis + agent, Langfuse). Needs compose up, Ollama (or `LLM_BASE_URL`), FlagEmbedding, and `scripts/download_bge.py`:
+
+```bash
+docker compose up -d
+uv run alembic upgrade head
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install FlagEmbedding
+uv run python scripts/download_bge.py
+uv run python scripts/e2e_research.py
+```
+
+That ingests `tests/fixtures/simple_mix/research.zip` into Qdrant collection `research_e2e` (so BGE vectors are not mixed with the fake embedder), then runs the agent with `--llm --trace`. Override `--source` / `--query`. `--skip-ingest` reruns only the agent.
 
 In the Launchpad, point the resource at env-configured Postgres, MinIO, and Qdrant:
 
@@ -199,6 +224,7 @@ src/material_platform/
   discovery/          boundary detectors, ZIP expansion
   application/        ingest, process, claim queue, Deep Research select
   analysis/           deterministic MaterialAnalysis
+  agent/              Deep Research plan / retrieve / cited report
   eval/               labeled retrieval queries and hit@1 scoring
   index/              Qdrant hybrid search (BGE-M3 or fake embedder)
   infrastructure/     stores, embedder, optional hop-2 reranker

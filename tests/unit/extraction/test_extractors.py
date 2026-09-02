@@ -75,11 +75,13 @@ def test_go_project_extraction_includes_go_line_ranges() -> None:
     )
     decision = classify_files(tuple(item.path for item in files))
     units = extract_units(decision, files)
-    by_path = {unit.location.path: unit for unit in units}
+    go = [unit for unit in units if unit.location.path == "main.go"]
     assert decision.subtype == "go"
-    assert by_path["main.go"].location.line_start == 1
-    assert by_path["main.go"].location.line_end == 5
-    assert "HandleRequest" in by_path["main.go"].content
+    handler = next(unit for unit in go if unit.location.section == "HandleRequest")
+    assert handler.location.line_start == 3
+    assert handler.location.line_end == 5
+    assert "HandleRequest" in handler.content
+    assert handler.metadata["strategy"] == "code.symbol"
 
 
 def test_notebook_extraction_uses_json_line_range() -> None:

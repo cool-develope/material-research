@@ -7,7 +7,7 @@ from material_platform.discovery.formats import ARTIFACT_FORMATS, BINARY_FORMATS
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import make_unit
-from material_platform.extraction.symbol import split_python_symbols
+from material_platform.extraction.symbol import split_symbols
 from material_platform.extraction.window import (
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_TOKENS,
@@ -65,8 +65,7 @@ def _code(
 ) -> list[ContentUnit]:
     chunks: list[ContentUnit] = []
     for unit in units:
-        path = (unit.location.path or "").lower()
-        symbols = split_python_symbols(unit) if path.endswith(".py") else ()
+        symbols = split_symbols(unit)
         if symbols:
             for piece in symbols:
                 chunks.extend(

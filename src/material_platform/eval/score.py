@@ -32,6 +32,7 @@ class CaseScore(Contract):
     k: int
     hit_at_1: bool
     recall_at_k: float
+    rank: int
     citations: tuple[str, ...]
 
 
@@ -66,9 +67,12 @@ def score_case(case: EvalCase, select: SelectFn) -> CaseScore:
         for expected in case.expect
         if any(matches(hit, expected) for hit in top)
     )
-    hit_at_1 = bool(citations) and any(
-        matches(citations[0], expected) for expected in case.expect
-    )
+    rank = 0
+    for index, hit in enumerate(top, start=1):
+        if any(matches(hit, expected) for expected in case.expect):
+            rank = index
+            break
+    hit_at_1 = rank == 1
     total = len(case.expect)
     return CaseScore(
         case_id=case.id,
@@ -77,6 +81,7 @@ def score_case(case: EvalCase, select: SelectFn) -> CaseScore:
         k=case.k,
         hit_at_1=hit_at_1,
         recall_at_k=(found / total) if total else 0.0,
+        rank=rank,
         citations=tuple(hit.citation for hit in top),
     )
 
@@ -109,17 +114,29 @@ def lexical_failed(score: SuiteScore) -> tuple[CaseScore, ...]:
     )
 
 
+def mrr(score: SuiteScore, mode: Mode | None = None) -> float:
+    items = (
+        score.cases
+        if mode is None
+        else tuple(item for item in score.cases if item.mode == mode)
+    )
+    if not items:
+        return 0.0
+    return sum((1.0 / item.rank) if item.rank else 0.0 for item in items) / len(items)
+
+
 def format_report(score: SuiteScore) -> str:
     lex_ok, lex_n = hit_at_1(score, LEXICAL)
     sem_ok, sem_n = hit_at_1(score, SEMANTIC)
     lines = [
         f"{score.suite_id}  lexical {lex_ok}/{lex_n} hit@1  "
-        f"semantic {sem_ok}/{sem_n} hit@1",
+        f"semantic {sem_ok}/{sem_n} hit@1  mrr {mrr(score):.3f}",
         "",
     ]
     for item in score.cases:
         mark = "ok" if item.hit_at_1 else "--"
         got = item.citations[0] if item.citations else "(none)"
         extra = f"  ({item.mode})" if item.mode != LEXICAL else ""
-        lines.append(f"  {mark}  {item.case_id}{extra}  {got}")
+        rank = f"rank {item.rank}" if item.rank else "miss"
+        lines.append(f"  {mark}  {item.case_id}{extra}  {rank}  {got}")
     return "\n".join(lines) + "\n"

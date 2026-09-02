@@ -182,3 +182,100 @@ def test_long_python_symbol_windows_keep_section() -> None:
     assert api[0].location.line_start == 1
     assert "value_000" in api[0].content
     assert "value_079" in api[-1].content
+
+
+def test_go_symbols_are_separate_units() -> None:
+    text = (
+        "package main\n"
+        "\n"
+        "func Alpha() string {\n"
+        "\treturn \"a\"\n"
+        "}\n"
+        "\n"
+        "type Box struct {\n"
+        "\tN int\n"
+        "}\n"
+        "\n"
+        "func (b Box) Method() int {\n"
+        "\treturn b.N\n"
+        "}\n"
+        "\n"
+        "func Beta() string {\n"
+        "\treturn \"b\"\n"
+        "}\n"
+    )
+    files = (
+        MaterialFile(path="go.mod", data=b"module example.com/tools\n"),
+        MaterialFile(path="main.go", data=text.encode()),
+    )
+    units = extract_units(classify_files(tuple(item.path for item in files)), files)
+    go = [unit for unit in units if unit.location.path == "main.go"]
+    names = [unit.location.section for unit in go]
+    assert names == [None, "Alpha", "Box", "Method", "Beta"]
+    assert all(unit.metadata["strategy"] == "code.symbol" for unit in go)
+    box = next(unit for unit in go if unit.location.section == "Box")
+    method = next(unit for unit in go if unit.location.section == "Method")
+    assert "N int" in box.content
+    assert "func (b Box) Method" in method.content
+    assert method.location.line_start == 11
+    assert "package main" in next(
+        unit for unit in go if unit.location.section is None
+    ).content
+
+
+def test_js_symbols_are_separate_units() -> None:
+    text = (
+        "const n = 1;\n"
+        "\n"
+        "@route\n"
+        "export function alpha() {\n"
+        "  return 1;\n"
+        "}\n"
+        "\n"
+        "export class Box {\n"
+        "  method() {\n"
+        "    return 2;\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "export async function beta() {\n"
+        "  return 3;\n"
+        "}\n"
+    )
+    files = (
+        MaterialFile(path="package.json", data=b'{"name":"frontend"}\n'),
+        MaterialFile(path="src/app.js", data=text.encode()),
+    )
+    units = extract_units(classify_files(tuple(item.path for item in files)), files)
+    js = [unit for unit in units if unit.location.path == "src/app.js"]
+    names = [unit.location.section for unit in js]
+    assert names == [None, "alpha", "Box", "beta"]
+    assert all(unit.metadata["strategy"] == "code.symbol" for unit in js)
+    alpha = next(unit for unit in js if unit.location.section == "alpha")
+    box = next(unit for unit in js if unit.location.section == "Box")
+    assert "@route" in alpha.content
+    assert "method()" in box.content
+    assert alpha.location.line_start == 3
+    assert "const n = 1" in next(
+        unit for unit in js if unit.location.section is None
+    ).content
+
+
+def test_long_go_symbol_windows_keep_section() -> None:
+    body = "\n".join(f"\tvalue_{index:03d} := {index}" for index in range(80))
+    text = f"package main\n\nfunc huge() {{\n{body}\n}}\n"
+    files = (
+        MaterialFile(path="go.mod", data=b"module example.com/tools\n"),
+        MaterialFile(path="main.go", data=text.encode()),
+    )
+    units = extract_units(
+        classify_files(tuple(item.path for item in files)),
+        files,
+        chunk_tokens=20,
+        chunk_overlap=4,
+    )
+    go = [unit for unit in units if unit.location.section == "huge"]
+    assert len(go) > 1
+    assert all(unit.metadata["strategy"] == "code.symbol" for unit in go)
+    assert "value_000" in go[0].content
+    assert "value_079" in go[-1].content

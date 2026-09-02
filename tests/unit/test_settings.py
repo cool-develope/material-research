@@ -29,6 +29,8 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.llm_model == "llama3.1"
     assert settings.analysis_digest_tokens == 8192
     assert settings.analysis_snippet_tokens == 256
+    assert settings.langfuse_public_key is None
+    assert settings.langfuse_host.startswith("https://")
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:

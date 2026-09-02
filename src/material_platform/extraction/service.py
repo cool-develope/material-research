@@ -31,7 +31,7 @@ from material_platform.extraction.window import (
 )
 
 EXTRACTOR = "extractors"
-EXTRACTOR_VERSION = "v5"
+EXTRACTOR_VERSION = "v6"
 
 
 def extract_units(

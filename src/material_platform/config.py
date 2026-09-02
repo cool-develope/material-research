@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     analysis_digest_tokens: int = 8192
     analysis_snippet_tokens: int = 256
 
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+
 
 def get_settings() -> Settings:
     return Settings()

@@ -4,6 +4,7 @@ from shutil import rmtree
 from zipfile import ZipFile
 
 from tests.unit.helpers.pdf import build_text_pdf
+from tests.unit.helpers.text import numbered_words
 
 COMPLEX_MATERIALS = (
     "README.md",
@@ -27,6 +28,9 @@ SIMPLE_ZIP = (
 )
 EVAL_HARD_ZIP = (
     Path(__file__).resolve().parents[2] / "fixtures" / "eval_hard" / "research.zip"
+)
+EVAL_LONG_ZIP = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "eval_long" / "research.zip"
 )
 
 
@@ -131,6 +135,19 @@ def make_eval_hard_tree(path: Path) -> Path:
     )
     make_dataset(path / "dataset")
     make_requirements_project(path / "tools" / "cli")
+    return path
+
+
+def make_eval_long_tree(path: Path) -> Path:
+    path.mkdir(parents=True)
+    treatise = (
+        "headmark_alpha appears at the start of the treatise.\n"
+        + numbered_words(2_000, "bodyw")
+        + "tailmark_omega appears at the end of the treatise.\n"
+    )
+    (path / "treatise.txt").write_text(treatise)
+    make_python_project(path / "backend")
+    make_dataset(path / "dataset")
     return path
 
 

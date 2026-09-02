@@ -6,6 +6,7 @@ from pathlib import Path
 
 from material_platform.analysis import make_analyzer
 from material_platform.application.ingest_source import IngestSourceService
+from material_platform.application.local import ingest_and_process, sqlite_settings
 from material_platform.application.process_material import (
     ProcessMaterialService,
     ProcessResult,
@@ -21,7 +22,6 @@ from material_platform.infrastructure.database.engine import (
     make_engine,
     make_session_factory,
 )
-from material_platform.infrastructure.database.models import Base
 from material_platform.infrastructure.object_store import make_object_store
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
@@ -57,28 +57,27 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = Settings()
     data_dir = (args.data_dir or settings.workspace_root).resolve()
-    data_dir.mkdir(parents=True, exist_ok=True)
     if args.postgres:
-        settings = settings.model_copy(update={"workspace_root": data_dir})
-        store = make_object_store(settings)
-    else:
-        settings = settings.model_copy(
-            update={
-                "database_url": f"sqlite:///{data_dir / 'material.db'}",
-                "workspace_root": data_dir,
-                "qdrant_url": None,
-                "qdrant_path": data_dir / "qdrant",
-            }
+        return _postgres(path, settings, data_dir, process=args.process)
+    settings = sqlite_settings(settings, data_dir)
+    run = ingest_and_process(path, settings, process=args.process, strict=False)
+    sys.stdout.write(
+        format_ingest_report(
+            run.ingest.source, run.ingest.manifest, run.ingest.materials
         )
-        store = make_object_store(settings, filesystem_root=data_dir / "store")
+    )
+    if args.process:
+        sys.stdout.write(format_process_report(run.ingest.manifest, run.processed))
+    return 0
 
+
+def _postgres(path: Path, settings: Settings, data_dir: Path, *, process: bool) -> int:
+    settings = settings.model_copy(update={"workspace_root": data_dir})
+    store = make_object_store(settings)
     engine = make_engine(settings)
-    if not args.postgres:
-        Base.metadata.create_all(engine)
     sessions = make_session_factory(engine)
     workspace = TemporaryWorkspace(data_dir)
     processed: tuple[ProcessResult, ...] = ()
-
     with sessions() as session:
         service = IngestSourceService.create(
             session,
@@ -89,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
             archive_limits=ArchiveLimits.from_settings(settings),
         )
         result = service.ingest(path)
-        if args.process:
+        if process:
             index = make_index_service(settings)
             processor = ProcessMaterialService(
                 session,
@@ -113,10 +112,9 @@ def main(argv: list[str] | None = None) -> int:
                     )
             processed = tuple(items)
         session.commit()
-
     sys.stdout.write(
         format_ingest_report(result.source, result.manifest, result.materials)
     )
-    if args.process:
+    if process:
         sys.stdout.write(format_process_report(result.manifest, processed))
     return 0

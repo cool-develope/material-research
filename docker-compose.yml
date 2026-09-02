@@ -1,3 +1,54 @@
+# Local stack. Langfuse reuses postgres (database `langfuse`) and minio
+# (bucket `langfuse`). ClickHouse and Redis are Langfuse-only (traces / queue).
+# UI: http://localhost:3100  (Dagster keeps 3000). ClickHouse native port is
+# not published — it would collide with MinIO on 9000. Images are Langfuse v4
+# (matches Python SDK 4.x; same Postgres/ClickHouse/Redis/MinIO as v3).
+
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3100
+  DATABASE_URL: postgresql://material:material@postgres:5432/langfuse
+  SALT: material-platform-local-salt
+  ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: minio123
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: minio123
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+
+x-langfuse-depends: &langfuse-depends
+  postgres:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+  langfuse-db-init:
+    condition: service_completed_successfully
+  minio-init:
+    condition: service_completed_successfully
+
 services:
   postgres:
     image: postgres:16
@@ -5,6 +56,8 @@ services:
       POSTGRES_USER: material
       POSTGRES_PASSWORD: material
       POSTGRES_DB: material
+      TZ: UTC
+      PGTZ: UTC
     ports:
       - "5432:5432"
     volumes:
@@ -26,6 +79,12 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/minio/health/live || mc ready local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   qdrant:
     image: qdrant/qdrant:v1.13.6
@@ -48,7 +107,93 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7
+    command: ["redis-server", "--requirepass", "langfuse", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "langfuse", "--no-auth-warning", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  langfuse-db-init:
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: material
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        psql -h postgres -U material -d material -tc
+        "SELECT 1 FROM pg_database WHERE datname = 'langfuse'"
+        | grep -q 1
+        || psql -h postgres -U material -d material -c "CREATE DATABASE langfuse"
+    restart: "no"
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 minio minio123
+        && mc mb -p local/material
+        && mc mb -p local/langfuse
+    restart: "no"
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4
+    depends_on: *langfuse-depends
+    ports:
+      - "3100:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: material-platform-local-nextauth
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      LANGFUSE_INIT_ORG_ID: material-platform
+      LANGFUSE_INIT_ORG_NAME: Material Platform
+      LANGFUSE_INIT_PROJECT_ID: deep-research
+      LANGFUSE_INIT_PROJECT_NAME: Deep Research
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-local
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-local
+      LANGFUSE_INIT_USER_EMAIL: langfuse@example.com
+      LANGFUSE_INIT_USER_NAME: local
+      LANGFUSE_INIT_USER_PASSWORD: langfuselocal
+
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    depends_on: *langfuse-depends
+    environment:
+      <<: *langfuse-env
+
 volumes:
   postgres-data:
   minio-data:
   qdrant-data:
+  redis-data:
+  clickhouse-data:
+  clickhouse-logs:

@@ -1,6 +1,7 @@
 from material_platform.eval.cases import (
     DEFAULT_SUITE,
     HARD_SUITE,
+    LONG_SUITE,
     LEXICAL,
     SEMANTIC,
     EvalCase,
@@ -15,6 +16,7 @@ from material_platform.eval.score import (
     hit_at_1,
     lexical_failed,
     matches,
+    mrr,
     score_case,
     score_suite,
 )
@@ -22,6 +24,7 @@ from material_platform.eval.score import (
 __all__ = [
     "DEFAULT_SUITE",
     "HARD_SUITE",
+    "LONG_SUITE",
     "LEXICAL",
     "SEMANTIC",
     "CaseScore",
@@ -34,6 +37,7 @@ __all__ = [
     "lexical_failed",
     "load_suite",
     "matches",
+    "mrr",
     "score_case",
     "score_suite",
 ]
