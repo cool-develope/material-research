@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from material_platform.index.tokens import tokenize
+from material_platform.extraction.tokens import tokenize
 
 DEFAULT_CHUNK_TOKENS = 512
 DEFAULT_CHUNK_OVERLAP = 64

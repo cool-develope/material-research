@@ -70,7 +70,7 @@ def test_go_project_extraction_includes_go_line_ranges() -> None:
         MaterialFile(path="go.mod", data=b"module example.com/tools\n"),
         MaterialFile(
             path="main.go",
-            data=b"package main\n\nfunc HandleRequest() string {\n\treturn \"ok\"\n}\n",
+            data=b'package main\n\nfunc HandleRequest() string {\n\treturn "ok"\n}\n',
         ),
     )
     decision = classify_files(tuple(item.path for item in files))
@@ -297,3 +297,19 @@ def test_project_respects_unit_budget() -> None:
     assert paths[0] == "pyproject.toml"
     assert paths[1] == "src/main.py"
     assert "src/api_24.py" not in paths
+
+
+def test_deep_files_skip_examples_and_drop_requirements_identity() -> None:
+    from material_platform.extraction.project import file_kind, select_deep_files
+
+    files = (
+        MaterialFile(path="pyproject.toml", data=b"[project]\nname='x'\n"),
+        MaterialFile(path="requirements.txt", data=b"pandas==2.2.0\n"),
+        MaterialFile(path="examples/demo.py", data=b"print('demo')\n"),
+        MaterialFile(path="src/main.py", data=b"print('ok')\n"),
+    )
+    assert file_kind(files[1]) != "identity"
+    chosen = {item.path for item in select_deep_files(files, max_units=20)}
+    assert "examples/demo.py" not in chosen
+    assert "pyproject.toml" in chosen
+    assert "src/main.py" in chosen

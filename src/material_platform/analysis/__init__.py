@@ -4,7 +4,7 @@ from material_platform.analysis.deterministic import (
     DeterministicAnalyzer,
     analyze_units,
 )
-from material_platform.analysis.factory import make_analyzer
+from material_platform.analysis.factory import make_analyzer, make_llm_client
 from material_platform.analysis.protocol import Analyzer
 
 __all__ = [
@@ -14,4 +14,5 @@ __all__ = [
     "DeterministicAnalyzer",
     "analyze_units",
     "make_analyzer",
+    "make_llm_client",
 ]

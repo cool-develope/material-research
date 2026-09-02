@@ -66,8 +66,7 @@ def test_small_document_profile_is_direct() -> None:
 
 def test_large_document_profile_is_hierarchical() -> None:
     units = tuple(
-        page_unit(page, f"Section {page}. " + ("token " * 80))
-        for page in range(1, 30)
+        page_unit(page, f"Section {page}. " + ("token " * 80)) for page in range(1, 30)
     )
     settings = Settings(
         _env_file=None,

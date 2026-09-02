@@ -8,7 +8,11 @@ from uuid import UUID
 from material_platform.config import Settings
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.index_entry import IndexEntry
-from material_platform.domain.research_material import ResearchMaterial
+from material_platform.domain.research_material import (
+    ContentLocation,
+    ResearchMaterial,
+    format_location,
+)
 from material_platform.index.payload import (
     INDEX_VERSION,
     LEVEL_MATERIAL,
@@ -121,7 +125,7 @@ class IndexService:
             hop1 = _scored_points(hop1_points)
             log.set_output(_brief_materials(hop1))
         material_ids = tuple(item.entry.material_id for item in hop1)
-        unit_limit = max(limit, UNIT_HOP)
+        unit_limit = min(max(limit, 1), UNIT_HOP)
         with log.span("hop2", k=unit_limit, materials=len(hop1), level="unit"):
             if material_ids:
                 unit_points = self._store.search(
@@ -167,13 +171,16 @@ class IndexService:
                     "docs": len(hop2),
                     "chars": chars,
                     "cap": RERANK_CHARS if reranked else 0,
-                    "top": _locator(ranked[0].entry) if ranked else None,
+                    "top": _location_label(ranked[0].entry) if ranked else None,
                 }
             )
         return SearchDetail(hop1=hop1, hop2=hop2, ranked=ranked, reranked=reranked)
 
     def count_for_material(self, material_id: UUID) -> int:
         return self._store.count_material(material_id)
+
+    def wipe(self) -> None:
+        self._store.recreate()
 
 
 def _scored_points(hits: Sequence[object]) -> tuple[ScoredEntry, ...]:
@@ -229,17 +236,23 @@ def _brief_materials(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
 
 
 def _brief_units(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
-    top = _locator(hits[0].entry) if hits else None
+    top = _location_label(hits[0].entry) if hits else None
     return {"hits": len(hits), "top": top}
 
 
-def _locator(entry: IndexEntry) -> str:
-    path = entry.path or ""
-    if entry.page is not None:
-        return f"{path} page {entry.page}"
-    if entry.line_start is not None and entry.line_end is not None:
-        return f"{path} lines {entry.line_start}-{entry.line_end}"
-    return path or entry.title
+def _location_label(entry: IndexEntry) -> str:
+    return (
+        format_location(
+            ContentLocation(
+                path=entry.path,
+                page=entry.page,
+                line_start=entry.line_start,
+                line_end=entry.line_end,
+                section=entry.section,
+            )
+        )
+        or entry.title
+    )
 
 
 def _clip(text: str) -> str:

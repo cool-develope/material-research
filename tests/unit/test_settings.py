@@ -27,8 +27,6 @@ def test_settings_defaults_match_local_dev() -> None:
     assert settings.analyzer == "deterministic"
     assert settings.llm_api_key == "ollama"
     assert settings.llm_model == "llama3.1"
-    assert settings.analysis_digest_tokens == 8192
-    assert settings.analysis_snippet_tokens == 256
     assert settings.analysis_direct_tokens == 20_000
     assert settings.analysis_leaf_tokens == 10_000
     assert settings.analysis_reduce_fanin == 8

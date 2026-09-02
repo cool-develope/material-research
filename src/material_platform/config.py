@@ -57,8 +57,6 @@ class Settings(BaseSettings):
     llm_api_key: str = "ollama"
     llm_model: str = "llama3.1"
     llm_timeout_seconds: int = 120
-    analysis_digest_tokens: int = 8192
-    analysis_snippet_tokens: int = 256
     analysis_direct_tokens: int = 20_000
     analysis_leaf_tokens: int = 10_000
     analysis_reduce_fanin: int = 8

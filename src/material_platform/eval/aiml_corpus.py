@@ -293,6 +293,3 @@ def agent_cases() -> tuple[EvalCase, ...]:
             expect=(ExpectedHit(path="src/peft"),),
         ),
     )
-
-
-AIML_SUITE = make_suite()

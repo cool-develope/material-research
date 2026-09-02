@@ -127,30 +127,45 @@ def test_replace_two_pages_is_three_points() -> None:
     assert hits[0].entry.page == 1
 
 
-def test_search_routes_summary_query_to_material_units() -> None:
+def test_search_routes_keyword_query_to_material_units() -> None:
     index = make_test_index()
     target = _research(_page("paper.pdf", 1, "Introduction to materials"))
     target = target.model_copy(
-        update={
-            "summary": "unique_summary_phrase_xyz for aerospace alloys",
-            "metadata": {"topics": ["alloys"]},
-        }
+        update={"metadata": {"keywords": ["aerospace_alloys_topic"]}}
     )
-    noise = ResearchMaterial(
+    distractor = ResearchMaterial(
         material_id=uuid4(),
         material_type=MaterialType.DOCUMENT,
         material_subtype="pdf",
         title="noise.pdf",
         summary="unrelated notes",
-        content_units=(_page("noise.pdf", 1, "unique_summary_phrase_xyz " * 40),),
+        content_units=(_page("noise.pdf", 1, "aerospace_alloys_topic " * 40),),
         provenance=MaterialProvenance(source_id=uuid4(), root_path="noise.pdf"),
     )
     index.replace(target)
-    index.replace(noise)
-    hits = index.search("unique_summary_phrase_xyz for aerospace alloys")
-    assert hits
-    assert all(hit.entry.unit_id != MATERIAL_UNIT_ID for hit in hits)
-    assert hits[0].entry.path == "paper.pdf"
+    index.replace(distractor)
+    for index_no in range(6):
+        filler = ResearchMaterial(
+            material_id=uuid4(),
+            material_type=MaterialType.DOCUMENT,
+            material_subtype="pdf",
+            title=f"filler{index_no}.pdf",
+            summary="other notes",
+            content_units=(
+                _page(f"filler{index_no}.pdf", 1, f"background filler {index_no}"),
+            ),
+            provenance=MaterialProvenance(
+                source_id=uuid4(), root_path=f"filler{index_no}.pdf"
+            ),
+        )
+        index.replace(filler)
+    detail = index.search_detail("aerospace_alloys_topic")
+    hop1_titles = {hit.entry.title for hit in detail.hop1}
+    assert "paper.pdf" in hop1_titles
+    assert "noise.pdf" not in hop1_titles
+    assert all(hit.entry.path != "noise.pdf" for hit in detail.hop2)
+    assert any(hit.entry.path == "paper.pdf" for hit in detail.hop2)
+    assert all(hit.entry.unit_id != MATERIAL_UNIT_ID for hit in detail.ranked)
 
 
 def test_search_falls_back_without_material_points() -> None:
@@ -232,3 +247,48 @@ def test_reranker_reorders_hop2() -> None:
     assert detail.reranked
     assert len(detail.hop2) == len(detail.ranked)
     assert detail.ranked[0].entry.page == 2
+
+
+def test_search_detail_caps_hop2_at_unit_hop() -> None:
+    from material_platform.index.service import UNIT_HOP
+
+    index = make_test_index()
+    units = tuple(
+        _page("paper.pdf", page, f"alpha shared page {page}")
+        for page in range(1, UNIT_HOP + 8)
+    )
+    index.replace(_research(*units))
+    detail = index.search_detail("alpha", limit=50)
+    assert len(detail.hop2) <= UNIT_HOP
+    assert len(detail.ranked) <= UNIT_HOP
+
+
+def test_wipe_drops_all_points() -> None:
+    index = make_test_index()
+    index.replace(_research(_page("paper.pdf", 1, "unique_wipe_phrase")))
+    assert index.search("unique_wipe_phrase")
+    index.wipe()
+    assert index.search("unique_wipe_phrase") == ()
+
+
+def test_unit_text_is_unit_body_not_analysis() -> None:
+    from material_platform.index.payload import material_text, unit_text
+
+    unit = _page("paper.pdf", 1, "page body about annealing")
+    research = _research(unit).model_copy(
+        update={
+            "title": "LLM Headline About Quantum Widgets",
+            "summary": "llm_summary_should_not_embed",
+            "metadata": {"keywords": ["grounded_keyword"], "topics": ["annealing"]},
+        }
+    )
+    text = unit_text(research, unit)
+    assert "page body about annealing" in text
+    assert "LLM Headline About Quantum Widgets" not in text
+    assert "llm_summary_should_not_embed" not in text
+    card = material_text(research)
+    assert card.startswith("paper.pdf")
+    assert "grounded_keyword" in card
+    assert "annealing" in card
+    assert "LLM Headline About Quantum Widgets" not in card
+    assert "llm_summary_should_not_embed" not in card

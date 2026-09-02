@@ -25,6 +25,7 @@ _SKIP_DIRS = frozenset(
     {
         "tests",
         "test",
+        "examples",
         "__pycache__",
         "node_modules",
         "dist",
@@ -34,8 +35,10 @@ _SKIP_DIRS = frozenset(
     }
 )
 _PROJECT_NAMES = frozenset({"go.mod", "Pipfile"})
-_PROJECT_SUFFIXES = CODE_SUFFIXES | TEXT_SUFFIXES | frozenset(
-    {".toml", ".json", ".xml", ".gradle", ".mod"}
+_PROJECT_SUFFIXES = (
+    CODE_SUFFIXES
+    | TEXT_SUFFIXES
+    | frozenset({".toml", ".json", ".xml", ".gradle", ".mod"})
 )
 _IDENTITY = frozenset(
     {
@@ -46,7 +49,6 @@ _IDENTITY = frozenset(
         "pom.xml",
         "pipfile",
         "setup.py",
-        "requirements.txt",
         "build.gradle",
     }
 )
@@ -108,9 +110,7 @@ def select_deep_files(
     max_units: int,
 ) -> tuple[MaterialFile, ...]:
     eligible = eligible_project_files(files)
-    by_kind: dict[str, list[MaterialFile]] = {
-        name: [] for name, _budget in _BUCKETS
-    }
+    by_kind: dict[str, list[MaterialFile]] = {name: [] for name, _budget in _BUCKETS}
     for item in eligible:
         by_kind.setdefault(file_kind(item), []).append(item)
     picked: list[MaterialFile] = []

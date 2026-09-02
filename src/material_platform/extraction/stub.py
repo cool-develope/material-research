@@ -5,7 +5,6 @@ from material_platform.discovery.formats import (
     BINARY_FORMATS,
     DOCX_FORMATS,
     LEGACY_DOC_FORMATS,
-    OFFICE_FORMATS,
     STUB_OFFICE_FORMATS,
 )
 from material_platform.domain.research_material import ContentUnit
@@ -31,10 +30,6 @@ def extract_stub(
 
 def is_artifact_subtype(subtype: str | None) -> bool:
     return subtype in ARTIFACT_FORMATS
-
-
-def is_office_subtype(subtype: str | None) -> bool:
-    return subtype in OFFICE_FORMATS
 
 
 def is_docx_subtype(subtype: str | None) -> bool:

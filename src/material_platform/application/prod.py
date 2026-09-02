@@ -114,6 +114,17 @@ def migrate_head() -> None:
     command.upgrade(Config(str(REPO / "alembic.ini")), "head")
 
 
+def wipe_index(settings: Settings) -> None:
+    """Drop and recreate the Qdrant collection.
+
+    IndexService.replace only deletes one material_id. Re-ingest without
+    wipe leaves prior points searchable.
+    """
+    from material_platform.index import make_index_service
+
+    make_index_service(settings).wipe()
+
+
 def listening(port: int) -> bool:
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=1):

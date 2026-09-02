@@ -5,7 +5,7 @@ from material_platform.application.process_material import ProcessResult
 from material_platform.domain.discovery import DiscoveryManifest, DiscoveryNode
 from material_platform.domain.enums import DiscoveryRole
 from material_platform.domain.material import Material
-from material_platform.domain.research_material import ContentLocation, ContentUnit
+from material_platform.domain.research_material import ContentUnit, format_location
 from material_platform.domain.source import Source
 
 _LOCATION_LIST = 4
@@ -68,15 +68,6 @@ def format_process_report(
     return "\n".join(lines) + "\n"
 
 
-def format_location(location: ContentLocation) -> str:
-    path = location.path or ""
-    if location.page is not None:
-        return f"{path} page {location.page}"
-    if location.line_start is not None and location.line_end is not None:
-        return f"{path} lines {location.line_start}-{location.line_end}"
-    return path
-
-
 def _location_lines(units: tuple[ContentUnit, ...]) -> list[str]:
     if not units:
         return []
@@ -87,9 +78,7 @@ def _location_lines(units: tuple[ContentUnit, ...]) -> list[str]:
     return [f"    {first} … {last}"]
 
 
-def _keywords_line(
-    keywords: tuple[str, ...], topics: tuple[str, ...]
-) -> str | None:
+def _keywords_line(keywords: tuple[str, ...], topics: tuple[str, ...]) -> str | None:
     names = [item.strip() for item in keywords if item.strip()]
     if not names:
         names = [item.strip() for item in topics if item.strip()]

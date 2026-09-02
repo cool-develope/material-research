@@ -22,6 +22,7 @@ from material_platform.application.prod import (
     migrate_head,
     preflight_prod,
     prod_env,
+    wipe_index,
 )
 from material_platform.config import Settings
 
@@ -54,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     migrate_head()
     py = sys.executable
     if not args.skip_ingest:
+        wipe_index(settings)
         _run(
             [
                 py,

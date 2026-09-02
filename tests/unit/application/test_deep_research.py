@@ -185,7 +185,7 @@ def test_reprocess_replaces_index_entries(
     count = index.count_for_material(paper.material_id)
     assert count >= 1
     assert store.exists(
-        material_artifact(paper.material_id, "analysis", ANALYZER_VERSION)
+        material_artifact(paper.material_id, "analysis", ANALYZER, ANALYZER_VERSION)
     )
     assert first.analysis.analyzer == ANALYZER
 

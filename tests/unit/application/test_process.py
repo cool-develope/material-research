@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
-from material_platform.analysis.profile import PROFILE_VERSION
+from material_platform.analysis.profile import PROFILE_PROCESSOR, PROFILE_VERSION
 from material_platform.application import ProcessMaterialService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.tree import format_location
@@ -23,7 +23,7 @@ from material_platform.infrastructure.object_store import (
     material_content,
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
-from material_platform.research import RESEARCH_VERSION
+from material_platform.research import RESEARCH_PROCESSOR, RESEARCH_VERSION
 from tests.unit.discovery.artifacts import write_docx, write_jar, write_pe, write_wheel
 from tests.unit.discovery.trees import (
     make_dataset,
@@ -82,13 +82,20 @@ def test_process_pdf_produces_page_locations(
     assert processed.research.metadata["pages"] == 1
     assert processed.analysis.analyzer == ANALYZER
     assert store.exists(
-        material_artifact(material.material_id, "research", RESEARCH_VERSION)
+        material_artifact(
+            material.material_id, "research", RESEARCH_PROCESSOR, RESEARCH_VERSION
+        )
     )
     assert store.exists(
-        material_artifact(material.material_id, "analysis", ANALYZER_VERSION)
+        material_artifact(material.material_id, "analysis", ANALYZER, ANALYZER_VERSION)
     )
     assert store.exists(
-        material_artifact(material.material_id, "analysis_profile", PROFILE_VERSION)
+        material_artifact(
+            material.material_id,
+            "analysis_profile",
+            PROFILE_PROCESSOR,
+            PROFILE_VERSION,
+        )
     )
 
 

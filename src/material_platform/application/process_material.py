@@ -138,7 +138,7 @@ class ProcessMaterialService:
                         }
                     )
                 )
-            self._session.flush()
+            self._session.commit()
             raise
 
     def _process(self, material: Material) -> ProcessResult:
@@ -251,7 +251,9 @@ class ProcessMaterialService:
         payload: dict[str, object],
     ) -> MaterialArtifact:
         body = json.dumps(payload, sort_keys=True).encode()
-        uri = material_artifact(material_id, artifact_type, processor_version)
+        uri = material_artifact(
+            material_id, artifact_type, processor, processor_version
+        )
         digest, size = sha256_stream(BytesIO(body))
         self._store.put(
             uri=uri,

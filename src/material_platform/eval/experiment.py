@@ -4,6 +4,7 @@ from pathlib import Path
 
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import ingest_and_process, sqlite_settings
+from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
 from material_platform.domain.base import Contract
 from material_platform.eval.cases import LEXICAL, SEMANTIC, EvalSuite
@@ -12,11 +13,6 @@ from material_platform.eval.score import (
     hit_at_1,
     mrr,
     score_suite,
-)
-from material_platform.index import make_index_service
-from material_platform.infrastructure.database.engine import (
-    make_engine,
-    make_session_factory,
 )
 
 
@@ -47,12 +43,12 @@ def score_settings(
     lexical_only: bool = False,
 ) -> SuiteScore:
     modes = (LEXICAL,) if lexical_only else None
-    engine = make_engine(settings)
-    sessions = make_session_factory(engine)
-    index = make_index_service(settings)
-    with sessions() as session:
+    runtime = Runtime(settings)
+    with runtime.session() as session:
         return score_suite(
-            suite, DeepResearchService(session, index).select, modes=modes
+            suite,
+            DeepResearchService(session, runtime.index).select,
+            modes=modes,
         )
 
 
@@ -72,9 +68,7 @@ def run_chunk_sweep(
             settings.model_copy(update={"chunk_tokens": size}), data_dir
         )
         ingested = ingest_and_process(source, run_settings, process=True)
-        score = score_settings(
-            run_settings, suite, lexical_only=lexical_only
-        )
+        score = score_settings(run_settings, suite, lexical_only=lexical_only)
         runs.append(
             ExperimentRun(
                 label=f"chunk_tokens={size}",

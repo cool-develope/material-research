@@ -43,6 +43,4 @@ class ResearchAgent:
         limit: int = 5,
         material_type: str | None = None,
     ) -> tuple[Citation, ...]:
-        _ = material_type
-        report = self.ask(query)
-        return report.citations[:limit]
+        return self._select(query, limit=limit, material_type=material_type)

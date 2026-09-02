@@ -3,8 +3,6 @@ from uuid import UUID
 import dagster as dg
 
 from defs.resources import PlatformResource
-from material_platform.analysis import make_analyzer
-from material_platform.application.process_material import ProcessMaterialService
 from material_platform.infrastructure.database.repositories import MaterialRepository
 
 
@@ -22,24 +20,15 @@ def process_material(
     platform: PlatformResource,
 ) -> str:
     material_id = UUID(config.material_id)
-    settings = platform.settings()
     with platform.session() as session:
         material = MaterialRepository(session).get(material_id)
         if material is None:
             raise dg.Failure(f"unknown material {material_id}")
-        result = ProcessMaterialService(
-            session,
-            platform.store(),
-            platform.index(),
-            pipeline_version=settings.pipeline_version,
-            dagster_run_id=context.run_id,
-            max_extract_bytes=settings.max_extract_bytes,
-            max_units_per_material=settings.max_units_per_material,
-            chunk_tokens=settings.chunk_tokens,
-            chunk_overlap_tokens=settings.chunk_overlap_tokens,
-            analyzer=make_analyzer(settings),
-            settings=settings,
-        ).process(material)
+        result = (
+            platform.runtime()
+            .processor(session, dagster_run_id=context.run_id)
+            .process(material)
+        )
     context.log.info("material %s is %s", material_id, result.material.status.value)
     return str(result.material.material_id)
 

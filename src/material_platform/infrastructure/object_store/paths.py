@@ -39,6 +39,9 @@ def material_content(material_id: UUID, relative_path: str) -> str:
 def material_artifact(
     material_id: UUID,
     artifact_type: str,
+    processor: str,
     processor_version: str,
 ) -> str:
-    return f"artifacts/{material_id}/{artifact_type}/{processor_version}.json"
+    return (
+        f"artifacts/{material_id}/{artifact_type}/{processor}/{processor_version}.json"
+    )

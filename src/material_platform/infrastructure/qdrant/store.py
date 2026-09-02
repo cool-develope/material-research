@@ -79,6 +79,11 @@ class QdrantIndexStore:
         )
         return int(result.count)
 
+    def recreate(self) -> None:
+        if self._client.collection_exists(self._collection):
+            self._client.delete_collection(self._collection)
+        _ensure_collection(self._client, self._collection)
+
 
 def _payload_filter(
     level: str | None,

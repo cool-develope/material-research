@@ -8,7 +8,7 @@ from material_platform.domain.research_material import ContentUnit, ResearchMate
 from material_platform.infrastructure.embedding.protocol import EmbeddedText
 from material_platform.infrastructure.qdrant.store import DENSE_NAME, SPARSE_NAME
 
-INDEX_VERSION = "v2"
+INDEX_VERSION = "v2"  # reprocess + wipe; replace() deletes one material_id
 LEVEL_UNIT = "content_unit"
 LEVEL_MATERIAL = "material"
 MATERIAL_UNIT_ID = "__material__"
@@ -20,9 +20,8 @@ def point_id(material_id: UUID, unit_id: str) -> str:
 
 
 def unit_text(research: ResearchMaterial, unit: ContentUnit) -> str:
-    extra = _meta_text(research.metadata, unit.metadata)
-    summary = research.summary.strip() if research.summary else ""
-    return f"{research.title} {summary} {extra} {unit.content}".strip()
+    extra = _meta_text(unit.metadata)
+    return f"{extra} {unit.content}".strip()
 
 
 def make_point(
@@ -47,14 +46,12 @@ def make_point(
 def material_text(research: ResearchMaterial) -> str:
     topics = research.metadata.get("topics")
     keywords = research.metadata.get("keywords")
-    extra_parts: list[str] = []
+    extra_parts: list[str] = [research.provenance.root_path]
     if isinstance(keywords, list):
         extra_parts.extend(str(item) for item in keywords[:24] if item)
     if isinstance(topics, list):
         extra_parts.extend(str(item) for item in topics[:12] if item)
-    extra = " ".join(extra_parts)
-    summary = research.summary.strip() if research.summary else ""
-    return f"{research.title} {summary} {extra}".strip()
+    return " ".join(extra_parts).strip()
 
 
 def make_material_point(

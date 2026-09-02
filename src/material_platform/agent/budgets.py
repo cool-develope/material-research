@@ -49,9 +49,3 @@ def budgets_for(mode: str | None = None) -> AgentBudgets:
     if found is None:
         raise ValueError(f"unknown agent mode: {mode}")
     return found
-
-
-def budgets_of(settings: object | None) -> AgentBudgets:
-    if settings is None:
-        return STANDARD
-    return budgets_for(getattr(settings, "agent_mode", None))

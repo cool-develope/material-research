@@ -6,15 +6,11 @@ from pathlib import Path
 
 from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import make_tracer, recorded
-from material_platform.analysis.openai_compat import OpenAICompatClient
+from material_platform.analysis import make_llm_client
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import sqlite_settings
+from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
-from material_platform.index import make_index_service
-from material_platform.infrastructure.database.engine import (
-    make_engine,
-    make_session_factory,
-)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,17 +58,10 @@ def main(argv: list[str] | None = None) -> int:
         if not settings.llm_base_url:
             print("LLM_BASE_URL required for --llm", file=sys.stderr)
             return 1
-        client = OpenAICompatClient(
-            settings.llm_base_url,
-            settings.llm_api_key,
-            settings.llm_model,
-            timeout=float(settings.llm_timeout_seconds),
-        )
-    engine = make_engine(settings)
-    sessions = make_session_factory(engine)
-    index = make_index_service(settings)
-    with sessions() as session:
-        select = DeepResearchService(session, index).select
+        client = make_llm_client(settings)
+    runtime = Runtime(settings)
+    with runtime.session() as session:
+        select = DeepResearchService(session, runtime.index).select
         agent = ResearchAgent(
             select,
             tracer=tracer,

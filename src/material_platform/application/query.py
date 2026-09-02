@@ -5,13 +5,10 @@ import sys
 from pathlib import Path
 
 from material_platform.application.deep_research import DeepResearchService
+from material_platform.application.local import sqlite_settings
+from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
 from material_platform.domain.citation import Citation
-from material_platform.index import make_index_service
-from material_platform.infrastructure.database.engine import (
-    make_engine,
-    make_session_factory,
-)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,20 +44,11 @@ def main(argv: list[str] | None = None) -> int:
         if not db_path.exists():
             print(f"database not found: {db_path}", file=sys.stderr)
             return 1
-        settings = settings.model_copy(
-            update={
-                "database_url": f"sqlite:///{db_path}",
-                "workspace_root": data_dir,
-                "qdrant_url": None,
-                "qdrant_path": data_dir / "qdrant",
-            }
-        )
+        settings = sqlite_settings(settings, data_dir)
 
-    engine = make_engine(settings)
-    sessions = make_session_factory(engine)
-    index = make_index_service(settings)
-    with sessions() as session:
-        citations = DeepResearchService(session, index).select(
+    runtime = Runtime(settings)
+    with runtime.session() as session:
+        citations = DeepResearchService(session, runtime.index).select(
             args.query, limit=args.limit, material_type=args.material_type
         )
     return _print_citations(citations)

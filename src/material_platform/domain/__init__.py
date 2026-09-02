@@ -31,6 +31,7 @@ from material_platform.domain.research_material import (
     ContentUnit,
     MaterialProvenance,
     ResearchMaterial,
+    format_location,
 )
 from material_platform.domain.source import Source
 
@@ -62,4 +63,5 @@ __all__ = [
     "Source",
     "SourceStatus",
     "SourceType",
+    "format_location",
 ]

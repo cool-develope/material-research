@@ -35,6 +35,17 @@ class FallbackAnalyzer:
             )
 
 
+def make_llm_client(settings: Settings) -> OpenAICompatClient:
+    if not settings.llm_base_url:
+        raise ValueError("LLM_BASE_URL is required")
+    return OpenAICompatClient(
+        settings.llm_base_url,
+        settings.llm_api_key,
+        settings.llm_model,
+        timeout=float(settings.llm_timeout_seconds),
+    )
+
+
 def make_analyzer(settings: Settings, *, client: LlmClient | None = None) -> Analyzer:
     fallback = DeterministicAnalyzer(settings)
     kind = settings.analyzer.strip().lower()
@@ -45,10 +56,5 @@ def make_analyzer(settings: Settings, *, client: LlmClient | None = None) -> Ana
     if client is None:
         if not settings.llm_base_url:
             raise ValueError("ANALYZER=llm requires LLM_BASE_URL")
-        client = OpenAICompatClient(
-            settings.llm_base_url,
-            settings.llm_api_key,
-            settings.llm_model,
-            timeout=float(settings.llm_timeout_seconds),
-        )
+        client = make_llm_client(settings)
     return FallbackAnalyzer(LlmAnalyzer(client, settings), fallback)

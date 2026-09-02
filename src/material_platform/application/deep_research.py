@@ -1,14 +1,16 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from material_platform.agent.trace import NoOpTracer, Tracer
-from material_platform.application.tree import format_location
 from material_platform.domain.citation import Citation
 from material_platform.domain.enums import MaterialStatus
 from material_platform.domain.index_entry import IndexEntry
 from material_platform.domain.material import Material
-from material_platform.domain.research_material import ContentLocation
+from material_platform.domain.research_material import ContentLocation, format_location
 from material_platform.index import IndexService
 from material_platform.index.payload import MATERIAL_UNIT_ID
 from material_platform.index.service import ScoredEntry
@@ -36,9 +38,9 @@ class DeepResearchService:
         *,
         limit: int = 5,
         material_type: str | None = None,
-        tracer: Tracer | None = None,
+        tracer: object | None = None,
     ) -> tuple[Citation, ...]:
-        log = tracer or NoOpTracer()
+        log = tracer or _NoopLog()
         detail = self._index.search_detail(
             query, limit=max(limit, 5), material_type=material_type, tracer=log
         )
@@ -54,7 +56,8 @@ class DeepResearchService:
                     "top": format_location(_location(hits[0].entry)) if hits else None,
                 }
             )
-        return tuple(_citation(hit, loaded, self._materials) for hit in hits)
+        siblings = _siblings_by_source(self._materials, loaded)
+        return tuple(_citation(hit, loaded, siblings) for hit in hits)
 
 
 def _load_materials(
@@ -107,7 +110,7 @@ def _location(entry: IndexEntry) -> ContentLocation:
 def _citation(
     hit: ScoredEntry,
     loaded: dict[UUID, Material],
-    repo: MaterialRepository,
+    siblings: dict[UUID, list[Material]],
 ) -> Citation:
     location = _location(hit.entry)
     material = loaded.get(hit.entry.material_id)
@@ -118,16 +121,30 @@ def _citation(
         citation=format_location(location),
         snippet=_snippet(hit.entry.content),
         score=hit.score,
-        siblings=_siblings(repo, material),
+        siblings=_sibling_names(siblings, material),
     )
 
 
-def _siblings(repo: MaterialRepository, material: Material | None) -> tuple[str, ...]:
+def _siblings_by_source(
+    repo: MaterialRepository, loaded: dict[UUID, Material]
+) -> dict[UUID, list[Material]]:
+    found: dict[UUID, list[Material]] = {}
+    for material in loaded.values():
+        source_id = material.source_id
+        if source_id in found:
+            continue
+        found[source_id] = repo.list_for_source(source_id)
+    return found
+
+
+def _sibling_names(
+    siblings: dict[UUID, list[Material]], material: Material | None
+) -> tuple[str, ...]:
     if material is None:
         return ()
     items = [
         item
-        for item in repo.list_for_source(material.source_id)
+        for item in siblings.get(material.source_id, [])
         if item.material_id != material.material_id
         and item.status is MaterialStatus.READY
     ]
@@ -152,3 +169,12 @@ def _snippet(content: str) -> str:
     if len(text) <= _SNIPPET:
         return text
     return text[: _SNIPPET - 1].rstrip() + "…"
+
+
+class _NoopLog:
+    @contextmanager
+    def span(self, name: str, **attrs: object) -> Iterator[None]:
+        yield
+
+    def set_output(self, value: object) -> None:
+        return None

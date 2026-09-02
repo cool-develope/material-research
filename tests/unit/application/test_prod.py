@@ -7,6 +7,7 @@ from material_platform.application.prod import (
     apply_prod_knobs,
     preflight_prod,
     prod_env,
+    wipe_index,
 )
 from material_platform.config import Settings
 
@@ -58,6 +59,20 @@ def test_preflight_prod_lists_compose_gaps(monkeypatch) -> None:
     assert "langfuse" in errors
     assert "LANGFUSE_PUBLIC_KEY" in errors
     assert "LLM is not reachable" in errors
+
+
+def test_wipe_index_recreates_collection(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class Fake:
+        def wipe(self) -> None:
+            calls.append("wipe")
+
+    monkeypatch.setattr(
+        "material_platform.index.make_index_service", lambda settings: Fake()
+    )
+    wipe_index(Settings(_env_file=None, qdrant_collection=AIML_COLLECTION))
+    assert calls == ["wipe"]
 
 
 def test_uses_postgres_follows_database_url(tmp_path: Path) -> None:

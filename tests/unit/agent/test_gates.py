@@ -46,10 +46,11 @@ def test_agent_eval_hard_lexical_hit_at_1(
     index: IndexService,
 ) -> None:
     ingest_and_process(session, tmp_path, EVAL_HARD_ZIP, index)
-    agent = ResearchAgent(
-        DeepResearchService(session, index).select, tracer=RecordingTracer()
+    scored = score_suite(
+        load_suite(HARD_SUITE),
+        DeepResearchService(session, index).select,
+        modes=(LEXICAL,),
     )
-    scored = score_suite(load_suite(HARD_SUITE), agent.select, modes=(LEXICAL,))
     ok, total = hit_at_1(scored, LEXICAL)
     assert not lexical_failed(scored), scored
     assert (ok, total) == (4, 4)

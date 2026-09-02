@@ -14,6 +14,15 @@ class ContentLocation(Contract):
     section: str | None = None
 
 
+def format_location(location: ContentLocation) -> str:
+    path = location.path or ""
+    if location.page is not None:
+        return f"{path} page {location.page}"
+    if location.line_start is not None and location.line_end is not None:
+        return f"{path} lines {location.line_start}-{location.line_end}"
+    return path
+
+
 class ContentUnit(Contract):
     unit_id: str
     type: str

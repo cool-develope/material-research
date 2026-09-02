@@ -7,7 +7,7 @@ from pathlib import Path
 
 from material_platform.agent.service import ResearchAgent
 from material_platform.agent.trace import make_tracer
-from material_platform.analysis.openai_compat import OpenAICompatClient
+from material_platform.analysis import make_llm_client
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import ingest_and_process, sqlite_settings
 from material_platform.application.prod import (
@@ -19,16 +19,16 @@ from material_platform.application.prod import (
     migrate_head,
     preflight_prod,
     prod_env,
+    wipe_index,
 )
+from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
 from material_platform.eval import (
     LEXICAL,
     SEMANTIC,
-    SuiteScore,
     format_report,
     hit_at_1,
     matches,
-    score_suite,
 )
 from material_platform.eval.aiml_checks import (
     citation_errors,
@@ -43,11 +43,7 @@ from material_platform.eval.aiml_corpus import (
 )
 from material_platform.eval.aiml_fetch import build_aiml_zip
 from material_platform.eval.cases import EvalSuite
-from material_platform.index import make_index_service
-from material_platform.infrastructure.database.engine import (
-    make_engine,
-    make_session_factory,
-)
+from material_platform.eval.experiment import score_settings
 
 _REQUIRED_AGENT = frozenset({"agent-qlora"})
 _LOCAL_DATA = Path("/tmp/mp-aiml")
@@ -108,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         os.chdir(REPO)
         migrate_head()
+        if not args.skip_ingest:
+            wipe_index(settings)
     else:
         settings = _eval_settings(data_dir)
 
@@ -128,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         print(format_errors(errors, heading="corpus"), end="")
 
     suite = _load_suite()
-    retrieve = score_settings_local(settings, suite, lexical_only=args.lexical_only)
+    retrieve = score_settings(settings, suite, lexical_only=args.lexical_only)
     report = format_report(retrieve)
     report_path = data_dir / "eval_aiml_report.txt"
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -168,36 +166,16 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def score_settings_local(
-    settings: Settings, suite: EvalSuite, *, lexical_only: bool
-) -> SuiteScore:
-    engine = make_engine(settings)
-    sessions = make_session_factory(engine)
-    index = make_index_service(settings)
-    modes = (LEXICAL,) if lexical_only else None
-    with sessions() as session:
-        return score_suite(
-            suite, DeepResearchService(session, index).select, modes=modes
-        )
-
-
 def _score_agent(settings: Settings, *, prod: bool) -> list[str]:
-    engine = make_engine(settings)
-    sessions = make_session_factory(engine)
-    index = make_index_service(settings)
     client = None
     if prod:
         if not settings.llm_base_url:
             return ["LLM_BASE_URL required for --prod agent"]
-        client = OpenAICompatClient(
-            settings.llm_base_url,
-            settings.llm_api_key,
-            settings.llm_model,
-            timeout=float(settings.llm_timeout_seconds),
-        )
+        client = make_llm_client(settings)
     errors: list[str] = []
-    with sessions() as session:
-        select = DeepResearchService(session, index).select
+    runtime = Runtime(settings)
+    with runtime.session() as session:
+        select = DeepResearchService(session, runtime.index).select
         for case in agent_cases():
             tracer = make_tracer(
                 public_key=settings.langfuse_public_key if prod else None,

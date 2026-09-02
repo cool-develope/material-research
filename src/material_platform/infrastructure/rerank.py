@@ -12,11 +12,6 @@ class Reranker(Protocol):
     def score(self, query: str, texts: Sequence[str]) -> tuple[float, ...]: ...
 
 
-class IdentityReranker:
-    def score(self, query: str, texts: Sequence[str]) -> tuple[float, ...]:
-        return tuple(0.0 for _ in texts)
-
-
 class BgeReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3") -> None:
         try:
