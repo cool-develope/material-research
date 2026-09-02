@@ -1,0 +1,20 @@
+{
+  "id": "eval_long",
+  "cases": [
+    {
+      "id": "treatise-head",
+      "query": "headmark_alpha",
+      "expect": [{"path": "treatise.txt", "lines": true}]
+    },
+    {
+      "id": "treatise-tail",
+      "query": "tailmark_omega",
+      "expect": [{"path": "treatise.txt", "lines": true}]
+    },
+    {
+      "id": "api-handler",
+      "query": "handle_request",
+      "expect": [{"path": "src/api.py", "lines": true}]
+    }
+  ]
+}
