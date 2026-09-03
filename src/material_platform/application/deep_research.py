@@ -8,20 +8,19 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from material_platform.application.index import IndexService, ScoredEntry
 from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.citation import Citation
 from material_platform.domain.enums import MaterialStatus
 from material_platform.domain.index_entry import IndexEntry
 from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation, format_location
-from material_platform.index import IndexService
-from material_platform.index.payload import MATERIAL_UNIT_ID
-from material_platform.index.service import ScoredEntry
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
     MaterialRepository,
 )
 from material_platform.infrastructure.object_store.protocol import ObjectStore
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
 
 _SNIPPET = 180
 _SOURCE_BOOST = 0.05

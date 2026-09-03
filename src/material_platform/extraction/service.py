@@ -9,9 +9,8 @@ from material_platform.classification.deterministic import (
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.artifact import extract_artifact
-from material_platform.extraction.budget import DEFAULT_MAX_UNITS
 from material_platform.extraction.chunk import chunk_units
-from material_platform.extraction.common import MaterialFile
+from material_platform.extraction.common import DEFAULT_MAX_UNITS, MaterialFile
 from material_platform.extraction.csv import extract_csv
 from material_platform.extraction.docx import extract_docx
 from material_platform.extraction.pdf import extract_pdf

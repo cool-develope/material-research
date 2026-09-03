@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 
 from material_platform.discovery.detectors.project import PROJECT_MARKERS
@@ -7,10 +6,18 @@ from material_platform.discovery.formats import (
     suffix_match,
     type_from_hint,
 )
+from material_platform.domain.classification import ClassificationDecision
 from material_platform.domain.enums import MaterialType
 
 CLASSIFIER = "deterministic"
 CLASSIFIER_VERSION = "v1"
+
+__all__ = [
+    "CLASSIFIER",
+    "CLASSIFIER_VERSION",
+    "ClassificationDecision",
+    "classify_files",
+]
 
 PDF_SUFFIXES = frozenset({".pdf"})
 TEXT_SUFFIXES = frozenset({".txt", ".md", ".rst"})
@@ -32,14 +39,6 @@ CODE_SUFFIXES = frozenset(
         ".ipynb",
     }
 )
-
-
-@dataclass(frozen=True)
-class ClassificationDecision:
-    material_type: MaterialType
-    subtype: str | None
-    confidence: float
-    evidence: tuple[str, ...]
 
 
 def classify_files(paths: tuple[str, ...]) -> ClassificationDecision:

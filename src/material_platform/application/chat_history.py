@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from material_platform.agent.compact import clip_answer
-from material_platform.agent.models import ChatTurn, ResearchReport
+from material_platform.domain.research import ChatTurn, ResearchReport
 from material_platform.infrastructure.database.chat_history import (
     ChatHistoryRepository,
     StoredChatThread,

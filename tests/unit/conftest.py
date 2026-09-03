@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from material_platform.index import IndexService
+from material_platform.application.index import IndexService
 from material_platform.infrastructure.database.engine import enable_sqlite_foreign_keys
 from material_platform.infrastructure.database.models import Base
 from tests.unit.helpers.index import make_test_index

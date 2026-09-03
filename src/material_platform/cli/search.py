@@ -5,10 +5,10 @@ import sys
 from pathlib import Path
 
 from material_platform.application.deep_research import DeepResearchService, MaterialHit
+from material_platform.application.index import SEARCH_PAGE_DEFAULT, SEARCH_PAGE_MAX
 from material_platform.application.local import sqlite_settings
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
-from material_platform.index.service import SEARCH_PAGE_DEFAULT, SEARCH_PAGE_MAX
 
 
 def main(argv: list[str] | None = None) -> int:

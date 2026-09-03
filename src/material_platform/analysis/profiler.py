@@ -4,23 +4,33 @@ from material_platform.analysis.document import extractive_leaf, hierarchical_di
 from material_platform.analysis.group import content_tokens, group_units
 from material_platform.analysis.inventory import scan_project
 from material_platform.analysis.keywords import from_units, unique
-from material_platform.analysis.profile import (
-    PROFILE_PROCESSOR,
-    PROFILE_VERSION,
-    AnalysisBudgets,
-    MaterialProfile,
-    budgets_of,
-)
 from material_platform.classification.deterministic import ClassificationDecision
 from material_platform.config import Settings
 from material_platform.discovery.formats import ARTIFACT_FORMATS
 from material_platform.domain.analysis import AnalysisCoverage
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.material import Material
+from material_platform.domain.profile import (
+    PROFILE_PROCESSOR,
+    PROFILE_VERSION,
+    AnalysisBudgets,
+    MaterialProfile,
+)
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import MaterialFile
 
-__all__ = ["PROFILE_PROCESSOR", "PROFILE_VERSION", "build_profile"]
+__all__ = ["PROFILE_PROCESSOR", "PROFILE_VERSION", "build_profile", "budgets_of"]
+
+
+def budgets_of(settings: Settings | None) -> AnalysisBudgets:
+    if settings is None:
+        return AnalysisBudgets()
+    return AnalysisBudgets(
+        direct_tokens=max(settings.analysis_direct_tokens, 1),
+        leaf_tokens=max(settings.analysis_leaf_tokens, 1),
+        reduce_fanin=max(settings.analysis_reduce_fanin, 2),
+        deep_files=max(settings.analysis_deep_files, 1),
+    )
 
 
 def build_profile(

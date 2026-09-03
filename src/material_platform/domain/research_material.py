@@ -1,9 +1,21 @@
+from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import Field
 
 from material_platform.domain.base import Contract
 from material_platform.domain.enums import MaterialType
+
+
+@dataclass(frozen=True)
+class MaterialFile:
+    path: str
+    data: bytes
+
+    @property
+    def suffix(self) -> str:
+        return Path(self.path).suffix.lower()
 
 
 class ContentLocation(Contract):

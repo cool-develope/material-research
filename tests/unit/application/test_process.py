@@ -5,13 +5,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
-from material_platform.analysis.profile import PROFILE_PROCESSOR, PROFILE_VERSION
 from material_platform.application import ProcessMaterialService
+from material_platform.application.index import IndexService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.tree import format_location
 from material_platform.discovery.archive import ArchiveLimits
 from material_platform.domain.enums import MaterialStatus, MaterialType
-from material_platform.index import IndexService
+from material_platform.domain.profile import PROFILE_PROCESSOR, PROFILE_VERSION
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
     ClassificationRepository,

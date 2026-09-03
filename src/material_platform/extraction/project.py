@@ -7,8 +7,11 @@ from material_platform.classification.deterministic import (
     TEXT_SUFFIXES,
 )
 from material_platform.domain.research_material import ContentUnit
-from material_platform.extraction.budget import DEFAULT_MAX_UNITS
-from material_platform.extraction.common import MaterialFile, merge_unit_metadata
+from material_platform.extraction.common import (
+    DEFAULT_MAX_UNITS,
+    MaterialFile,
+    merge_unit_metadata,
+)
 from material_platform.extraction.manifest import project_identity
 from material_platform.extraction.text import extract_text
 

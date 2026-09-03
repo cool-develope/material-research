@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from material_platform.agent.budgets import AgentBudgets, budgets_for
 from material_platform.agent.graph import report_of, run_agent
-from material_platform.agent.models import ChatTurn, ResearchReport
 from material_platform.agent.retrieve import SelectFn
 from material_platform.agent.state import AgentState
-from material_platform.agent.trace import Tracer, make_tracer
-from material_platform.analysis.protocol import LlmClient
+from material_platform.domain.budgets import AgentBudgets, budgets_for
 from material_platform.domain.citation import Citation
+from material_platform.domain.protocols import LlmClient
+from material_platform.domain.research import ChatTurn, ResearchReport
+from material_platform.infrastructure.tracing.trace import Tracer, make_tracer
 
 
 class ResearchAgent:

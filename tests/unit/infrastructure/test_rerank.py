@@ -1,12 +1,12 @@
 import pytest
 
 from material_platform.config import Settings
-from material_platform.infrastructure import rerank as rerank_mod
 from material_platform.infrastructure.rerank import (
     RERANK_CHARS,
     clip_rerank_text,
     make_reranker,
 )
+from material_platform.infrastructure.rerank import factory as rerank_factory
 
 
 def test_make_reranker_defaults_off() -> None:
@@ -18,14 +18,16 @@ def test_make_reranker_on_is_bge_alias(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, name: str) -> None:
             self.name = name
 
-    rerank_mod._MODELS.clear()
-    monkeypatch.setattr("material_platform.infrastructure.rerank.BgeReranker", Fake)
+    rerank_factory._MODELS.clear()
+    monkeypatch.setattr(
+        "material_platform.infrastructure.rerank.factory.BgeReranker", Fake
+    )
     reranker = make_reranker(Settings(_env_file=None, reranker="on"))
     assert isinstance(reranker, Fake)
     assert reranker.name == "BAAI/bge-reranker-v2-m3"
     again = make_reranker(Settings(_env_file=None, reranker="on"))
     assert again is reranker
-    rerank_mod._MODELS.clear()
+    rerank_factory._MODELS.clear()
 
 
 def test_clip_rerank_text_caps_long_passages() -> None:

@@ -5,6 +5,7 @@ from tests.unit.discovery.trees import SIMPLE_ZIP
 from tests.unit.helpers.eval_run import ingest_and_process
 
 from material_platform.application.deep_research import DeepResearchService
+from material_platform.application.index import IndexService
 from material_platform.eval import (
     DEFAULT_SUITE,
     LEXICAL,
@@ -13,7 +14,6 @@ from material_platform.eval import (
     load_suite,
     score_suite,
 )
-from material_platform.index import IndexService
 
 
 def test_simple_mix_lexical_cases_hit_at_1(

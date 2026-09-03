@@ -120,7 +120,7 @@ def wipe_index(settings: Settings) -> None:
     IndexService.replace only deletes one material_id. Re-ingest without
     wipe leaves prior points searchable.
     """
-    from material_platform.index import make_index_service
+    from material_platform.application.index import make_index_service
 
     make_index_service(settings).wipe()
 

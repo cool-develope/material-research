@@ -5,15 +5,11 @@ from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
-from material_platform.agent.budgets import STANDARD, AgentBudgets
 from material_platform.agent.context import for_plan
 from material_platform.agent.coverage import gap_check, has_work, needs_retrieve
 from material_platform.agent.extract import extract_pending
 from material_platform.agent.findings import build_findings
-from material_platform.agent.langfuse_trace import langfuse_handler
-from material_platform.agent.llm import named_llm
 from material_platform.agent.memory import remember
-from material_platform.agent.models import ChatTurn, ResearchReport
 from material_platform.agent.planner import plan_state
 from material_platform.agent.retrieve import SelectFn, retrieve_one
 from material_platform.agent.state import (
@@ -23,10 +19,16 @@ from material_platform.agent.state import (
     state_from_turns,
 )
 from material_platform.agent.synthesizer import write_report
-from material_platform.agent.trace import Tracer, clip
 from material_platform.agent.validate import validate_report
-from material_platform.analysis.protocol import LlmClient
+from material_platform.domain.budgets import STANDARD, AgentBudgets
 from material_platform.domain.citation import Citation
+from material_platform.domain.protocols import LlmClient
+from material_platform.domain.research import ChatTurn, ResearchReport
+from material_platform.infrastructure.tracing.langfuse_trace import (
+    langfuse_handler,
+)
+from material_platform.infrastructure.tracing.llm import named_llm
+from material_platform.infrastructure.tracing.trace import Tracer, clip
 
 
 class GraphState(TypedDict):
@@ -253,8 +255,10 @@ def _config(
 
 
 def _has_langfuse(tracer: Tracer) -> bool:
-    from material_platform.agent.langfuse_trace import LangfuseTracer
-    from material_platform.agent.trace import TeeTracer
+    from material_platform.infrastructure.tracing.langfuse_trace import (
+        LangfuseTracer,
+    )
+    from material_platform.infrastructure.tracing.trace import TeeTracer
 
     if isinstance(tracer, LangfuseTracer):
         return True

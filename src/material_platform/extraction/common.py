@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
-from pathlib import Path
 
 from material_platform.domain.research_material import (
     ContentLocation,
     ContentUnit,
+    MaterialFile,
 )
 
+DEFAULT_MAX_UNITS = 20
 
-@dataclass(frozen=True)
-class MaterialFile:
-    path: str
-    data: bytes
-
-    @property
-    def suffix(self) -> str:
-        return Path(self.path).suffix.lower()
+__all__ = [
+    "DEFAULT_MAX_UNITS",
+    "MaterialFile",
+    "decode_text",
+    "line_count",
+    "make_unit",
+    "merge_unit_metadata",
+    "unit_digest",
+]
 
 
 def unit_digest(content: str) -> str:

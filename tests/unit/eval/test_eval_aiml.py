@@ -135,7 +135,7 @@ def test_eval_aiml_zip_layout() -> None:
 )
 def test_eval_aiml_ingest_and_required_retrieve(tmp_path: Path) -> None:
     from material_platform.application.deep_research import DeepResearchService
-    from material_platform.index import make_index_service
+    from material_platform.application.index import make_index_service
     from material_platform.infrastructure.database.engine import (
         make_engine,
         make_session_factory,

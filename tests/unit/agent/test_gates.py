@@ -5,8 +5,8 @@ from tests.unit.discovery.trees import EVAL_HARD_ZIP, SIMPLE_ZIP
 from tests.unit.helpers.eval_run import ingest_and_process
 
 from material_platform.agent.service import ResearchAgent
-from material_platform.agent.trace import RecordingTracer
 from material_platform.application.deep_research import DeepResearchService
+from material_platform.application.index import IndexService
 from material_platform.eval import (
     HARD_SUITE,
     LEXICAL,
@@ -15,7 +15,7 @@ from material_platform.eval import (
     load_suite,
     score_suite,
 )
-from material_platform.index import IndexService
+from material_platform.infrastructure.tracing.trace import RecordingTracer
 
 
 def test_agent_simple_mix_handle_request(

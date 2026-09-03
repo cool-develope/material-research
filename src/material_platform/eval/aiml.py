@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 from material_platform.agent.service import ResearchAgent
-from material_platform.agent.trace import make_tracer
 from material_platform.analysis import make_llm_client
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import ingest_and_process, sqlite_settings
@@ -44,6 +43,7 @@ from material_platform.eval.prod import (
     prod_env,
     wipe_index,
 )
+from material_platform.infrastructure.tracing.trace import make_tracer
 
 _REQUIRED_AGENT = frozenset({"agent-qlora"})
 _LOCAL_DATA = Path("/tmp/mp-aiml")

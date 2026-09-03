@@ -5,7 +5,7 @@ from material_platform.analysis.deterministic import (
     analyze_units,
 )
 from material_platform.analysis.factory import make_analyzer, make_llm_client
-from material_platform.analysis.protocol import Analyzer
+from material_platform.domain.protocols import Analyzer
 
 __all__ = [
     "ANALYZER",

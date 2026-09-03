@@ -9,18 +9,19 @@ from pydantic import PrivateAttr
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from material_platform.application.index import IndexService
 from material_platform.application.local import sqlite_settings
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import IndexService
 from material_platform.infrastructure.object_store.protocol import ObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
 
 class PlatformResource(dg.ConfigurableResource):  # type: ignore[type-arg]
     data_dir: str = "/tmp/material-platform"
-    use_sqlite: bool = True
+    use_sqlite: bool = False
+    ingest_dir: str = ""
     _runtime: Runtime | None = PrivateAttr(default=None)
 
     def runtime(self) -> Runtime:

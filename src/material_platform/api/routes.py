@@ -4,9 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from material_platform.agent.models import ResearchReport
 from material_platform.agent.service import ResearchAgent
-from material_platform.agent.trace import Tracer, make_tracer
 from material_platform.analysis import make_llm_client
 from material_platform.api.schemas import (
     ChatHistoryMessage,
@@ -33,7 +31,9 @@ from material_platform.application.chat_history import (
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
+from material_platform.domain.research import ResearchReport
 from material_platform.infrastructure.database.auth import StoredUser
+from material_platform.infrastructure.tracing.trace import Tracer, make_tracer
 
 router = APIRouter()
 

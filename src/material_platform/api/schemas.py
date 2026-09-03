@@ -5,11 +5,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from material_platform.agent.budgets import AgentMode
-from material_platform.agent.models import ReportSection
+from material_platform.application.index import SEARCH_PAGE_DEFAULT, SEARCH_PAGE_MAX
+from material_platform.domain.budgets import AgentMode
 from material_platform.domain.citation import Citation
 from material_platform.domain.enums import MaterialType
-from material_platform.index.service import SEARCH_PAGE_DEFAULT, SEARCH_PAGE_MAX
+from material_platform.domain.research import ReportSection
 
 _MATERIAL_TYPES = {item.value for item in MaterialType}
 

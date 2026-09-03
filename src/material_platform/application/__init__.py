@@ -1,4 +1,9 @@
 from material_platform.application.deep_research import DeepResearchService
+from material_platform.application.index import (
+    IndexService,
+    ScoredEntry,
+    make_index_service,
+)
 from material_platform.application.ingest_source import (
     IngestResult,
     IngestSourceService,
@@ -16,6 +21,9 @@ from material_platform.application.tree import (
 
 __all__ = [
     "DeepResearchService",
+    "IndexService",
+    "ScoredEntry",
+    "make_index_service",
     "IngestResult",
     "IngestSourceService",
     "ProcessMaterialService",

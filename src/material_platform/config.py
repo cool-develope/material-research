@@ -49,8 +49,16 @@ class Settings(BaseSettings):
     qdrant_collection: str = "research"
     embedder: str = "fake"
     bge_model: str = "BAAI/bge-m3"
+    embed_base_url: str | None = None
+    embed_api_key: str = "embed"
+    embed_model: str | None = None
+    embed_timeout_seconds: int = 120
     bge_reranker: str = "BAAI/bge-reranker-v2-m3"
     reranker: str = "off"
+    rerank_base_url: str | None = None
+    rerank_api_key: str = "rerank"
+    rerank_model: str | None = None
+    rerank_timeout_seconds: int = 120
 
     analyzer: str = "deterministic"
     llm_base_url: str | None = None

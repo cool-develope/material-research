@@ -4,13 +4,13 @@ from material_platform.analysis.deterministic import DeterministicAnalyzer
 from material_platform.analysis.document import extractive_leaf, merge_leaves
 from material_platform.analysis.group import group_units
 from material_platform.analysis.keywords import grounded, unique
-from material_platform.analysis.profile import MaterialProfile, budgets_of
-from material_platform.analysis.profiler import build_profile
-from material_platform.analysis.protocol import LlmClient
+from material_platform.analysis.profiler import budgets_of, build_profile
 from material_platform.classification.deterministic import ClassificationDecision
 from material_platform.config import Settings
 from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.material import Material
+from material_platform.domain.profile import MaterialProfile
+from material_platform.domain.protocols import LlmClient
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import MaterialFile
 

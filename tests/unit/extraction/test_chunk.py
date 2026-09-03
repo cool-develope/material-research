@@ -1,6 +1,6 @@
 from material_platform.classification import classify_files
 from material_platform.extraction import MaterialFile, extract_units
-from material_platform.index.tokens import tokenize
+from material_platform.extraction.tokens import tokenize
 from tests.unit.helpers.docx import build_docx
 from tests.unit.helpers.pdf import build_text_pdf
 

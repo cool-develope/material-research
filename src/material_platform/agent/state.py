@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from material_platform.agent.budgets import STANDARD, AgentBudgets
 from material_platform.agent.compact import (
     clip_answer,
     clip_research,
     fold_turns,
 )
-from material_platform.agent.models import (
+from material_platform.domain.budgets import STANDARD, AgentBudgets
+from material_platform.domain.citation import Citation
+from material_platform.domain.protocols import LlmClient
+from material_platform.domain.research import (
     ChatTurn,
     ConversationSummary,
     EvidenceItem,
@@ -20,8 +22,6 @@ from material_platform.agent.models import (
     ResearchRequest,
     SearchAttempt,
 )
-from material_platform.analysis.protocol import LlmClient
-from material_platform.domain.citation import Citation
 
 
 @dataclass

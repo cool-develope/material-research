@@ -69,7 +69,8 @@ def test_wipe_index_recreates_collection(monkeypatch) -> None:
             calls.append("wipe")
 
     monkeypatch.setattr(
-        "material_platform.index.make_index_service", lambda settings: Fake()
+        "material_platform.application.index.make_index_service",
+        lambda settings: Fake(),
     )
     wipe_index(Settings(_env_file=None, qdrant_collection=AIML_COLLECTION))
     assert calls == ["wipe"]

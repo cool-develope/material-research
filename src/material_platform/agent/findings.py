@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from material_platform.agent.models import EvidenceItem, Finding
 from material_platform.agent.state import AgentState
-from material_platform.agent.trace import Tracer, clip
+from material_platform.domain.research import EvidenceItem, Finding
+from material_platform.infrastructure.tracing.trace import Tracer, clip
 
 
 def build_findings(state: AgentState, *, tracer: Tracer) -> AgentState:

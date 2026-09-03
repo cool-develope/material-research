@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from material_platform.agent.models import Finding, ResearchReport
 from material_platform.agent.state import AgentState
-from material_platform.agent.trace import Tracer, clip
 from material_platform.domain.citation import Citation
-from material_platform.index.payload import MATERIAL_UNIT_ID
+from material_platform.domain.research import Finding, ResearchReport
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.tracing.trace import Tracer, clip
 
 
 def validate_report(state: AgentState, *, tracer: Tracer) -> AgentState:

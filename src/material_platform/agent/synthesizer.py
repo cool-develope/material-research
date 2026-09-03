@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from material_platform.agent.context import chat_context, for_summary, for_write_section
-from material_platform.agent.llm import named_llm
-from material_platform.agent.models import ReportSection, ResearchReport
 from material_platform.agent.state import AgentState
-from material_platform.agent.trace import Tracer, clip
-from material_platform.analysis.protocol import LlmClient
 from material_platform.domain.citation import Citation
+from material_platform.domain.protocols import LlmClient
+from material_platform.domain.research import ReportSection, ResearchReport
+from material_platform.infrastructure.tracing.llm import named_llm
+from material_platform.infrastructure.tracing.trace import Tracer, clip
 
 
 def write_report(

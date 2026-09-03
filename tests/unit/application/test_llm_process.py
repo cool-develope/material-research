@@ -4,11 +4,11 @@ from sqlalchemy.orm import Session
 
 from material_platform.analysis.factory import make_analyzer
 from material_platform.analysis.llm import ANALYZER as LLM_ANALYZER
+from material_platform.application.index import IndexService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import IndexService
 from material_platform.infrastructure.object_store import FilesystemObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.discovery.trees import make_mixed_tree, zip_contents

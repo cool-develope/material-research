@@ -11,7 +11,7 @@ from material_platform.domain.research_material import (
     MaterialProvenance,
     ResearchMaterial,
 )
-from material_platform.index.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
 
 
 def _research(*units: ContentUnit) -> ResearchMaterial:
@@ -221,7 +221,7 @@ def test_search_materials_paginates() -> None:
 def test_search_materials_reuses_query_embedding() -> None:
     from qdrant_client import QdrantClient
 
-    from material_platform.index.service import IndexService
+    from material_platform.application.index import IndexService
     from material_platform.infrastructure.embedding.fake import FakeEmbedder
     from material_platform.infrastructure.embedding.protocol import EmbeddedText
     from material_platform.infrastructure.qdrant.store import QdrantIndexStore
@@ -287,11 +287,13 @@ def test_search_materials_filters_by_material_type() -> None:
     )
     index.replace(paper)
     index.replace(backend)
-    project_hits = index.search_materials("handle_request", material_type="project").hits
+    project_hits = index.search_materials(
+        "handle_request", material_type="project").hits
     assert project_hits
     assert all(hit.entry.unit_id == MATERIAL_UNIT_ID for hit in project_hits)
     assert project_hits[0].entry.title == "backend"
-    document_hits = index.search_materials("handle_request", material_type="document").hits
+    document_hits = index.search_materials(
+        "handle_request", material_type="document").hits
     assert document_hits
     assert document_hits[0].entry.title == "paper.pdf"
 
@@ -299,9 +301,9 @@ def test_search_materials_filters_by_material_type() -> None:
 def test_search_falls_back_without_material_points() -> None:
     from qdrant_client import QdrantClient
 
-    from material_platform.index.payload import make_point, unit_text
-    from material_platform.index.service import IndexService
+    from material_platform.application.index import IndexService
     from material_platform.infrastructure.embedding.fake import FakeEmbedder
+    from material_platform.infrastructure.qdrant.payload import make_point, unit_text
     from material_platform.infrastructure.qdrant.store import QdrantIndexStore
 
     embedder = FakeEmbedder()
@@ -378,7 +380,7 @@ def test_reranker_reorders_hop2() -> None:
 
 
 def test_search_detail_caps_hop2_at_unit_hop() -> None:
-    from material_platform.index.service import UNIT_HOP
+    from material_platform.application.index import UNIT_HOP
 
     index = make_test_index()
     units = tuple(
@@ -400,7 +402,7 @@ def test_wipe_drops_all_points() -> None:
 
 
 def test_unit_text_is_unit_body_not_analysis() -> None:
-    from material_platform.index.payload import material_text, unit_text
+    from material_platform.infrastructure.qdrant.payload import material_text, unit_text
 
     unit = _page("paper.pdf", 1, "page body about annealing")
     research = _research(unit).model_copy(

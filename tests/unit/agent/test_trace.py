@@ -1,7 +1,7 @@
 import pytest
 
-from material_platform.agent.llm import TracedLlmClient
-from material_platform.agent.trace import (
+from material_platform.infrastructure.tracing.llm import TracedLlmClient
+from material_platform.infrastructure.tracing.trace import (
     NoOpTracer,
     RecordingTracer,
     clip_llm,

@@ -4,14 +4,14 @@ import pytest
 
 from material_platform.analysis.factory import make_analyzer
 from material_platform.analysis.llm import ANALYZER as LLM_ANALYZER
-from material_platform.analysis.openai_compat import (
+from material_platform.classification import classify_files
+from material_platform.config import Settings
+from material_platform.extraction import MaterialFile, extract_units
+from material_platform.infrastructure.llm.openai_compat import (
     OpenAICompatClient,
     _chat_body,
     _parse_json,
 )
-from material_platform.classification import classify_files
-from material_platform.config import Settings
-from material_platform.extraction import MaterialFile, extract_units
 from tests.unit.discovery.artifacts import write_wheel
 from tests.unit.helpers.analysis import (
     StubLlm,

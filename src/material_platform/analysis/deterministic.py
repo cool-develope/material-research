@@ -4,13 +4,13 @@ import re
 from pathlib import Path
 
 from material_platform.analysis.keywords import from_units, grounded, unique
-from material_platform.analysis.profile import MaterialProfile
 from material_platform.analysis.profiler import build_profile
 from material_platform.classification.deterministic import ClassificationDecision
 from material_platform.config import Settings
 from material_platform.domain.analysis import AnalyzedEntity, MaterialAnalysis
 from material_platform.domain.enums import MaterialType
 from material_platform.domain.material import Material
+from material_platform.domain.profile import MaterialProfile
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import MaterialFile
 

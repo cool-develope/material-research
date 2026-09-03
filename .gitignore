@@ -13,9 +13,7 @@ htmlcov/
 *.log
 .dagster/
 .tmp_dagster_home*/
-
-# Architecture notes at the repo root — not the Python package.
-/research/
+/inbox/
 
 # Downloaded AI/ML eval corpus (PDFs, GitHub trees, wheels). Do not commit.
 /tests/fixtures/eval_aiml/cache/

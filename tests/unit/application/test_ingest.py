@@ -13,6 +13,7 @@ from material_platform.infrastructure.object_store import (
     FilesystemObjectStore,
     discovery_manifest,
     material_content,
+    raw_original,
 )
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.discovery.trees import (
@@ -60,6 +61,9 @@ def test_ingest_mixed_zip_creates_three_materials(
     assert "project candidate" in report
     assert "document candidate" in report
     assert "dataset candidate" in report
+
+    assert result.source.raw_uri == f"file://{archive.resolve()}"
+    assert not store.exists(raw_original(result.source.source_id))
 
     backend = next(item for item in result.materials if item.root_path == "backend/")
     assert backend.material_type is MaterialType.PROJECT

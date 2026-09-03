@@ -15,7 +15,7 @@ from material_platform.eval.aiml_corpus import (
     expected_roots,
     expected_type,
 )
-from material_platform.index.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
 
 _SKIPPED_MATERIAL_PARTS = ("node_modules", ".venv", "venv")
 SLP3_MIN_PAGES = 400

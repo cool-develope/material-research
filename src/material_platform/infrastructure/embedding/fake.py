@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 
-from material_platform.index.tokens import tokenize
+from material_platform.extraction.tokens import tokenize
 from material_platform.infrastructure.embedding.protocol import (
     DENSE_SIZE,
     EmbeddedText,

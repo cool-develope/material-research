@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from material_platform.agent.models import Finding, ReportSection
 from material_platform.agent.state import AgentState
 from material_platform.domain.citation import Citation
+from material_platform.domain.research import Finding, ReportSection
 
 MAP_CHARS = 8000
 

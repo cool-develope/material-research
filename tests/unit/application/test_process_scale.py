@@ -2,10 +2,10 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from material_platform.application.index import IndexService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import IndexService
 from material_platform.infrastructure.object_store import FilesystemObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.helpers.text import numbered_words

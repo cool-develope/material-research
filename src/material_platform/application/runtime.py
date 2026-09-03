@@ -7,10 +7,10 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from material_platform.analysis import make_analyzer
+from material_platform.application.index import IndexService, make_index_service
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.config import Settings
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import IndexService, make_index_service
 from material_platform.infrastructure.database.engine import (
     make_engine,
     make_session_factory,

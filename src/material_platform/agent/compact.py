@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from material_platform.agent.models import ChatTurn, ConversationSummary
-from material_platform.analysis.protocol import LlmClient
+from material_platform.domain.protocols import LlmClient
+from material_platform.domain.research import ChatTurn, ConversationSummary
 
 RECENT_TURNS = 5
 _SUMMARY = 800
@@ -156,7 +156,9 @@ def _summary_of(
 def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
-    return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return tuple(
+        item.strip() for item in value if isinstance(item, str) and item.strip()
+    )
 
 
 def _clip(text: str, limit: int) -> str:

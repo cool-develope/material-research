@@ -1,4 +1,4 @@
-from material_platform.index.tokens import tokenize
+from material_platform.extraction.tokens import tokenize
 
 
 def numbered_words(count: int, prefix: str, *, per_line: int = 16) -> str:

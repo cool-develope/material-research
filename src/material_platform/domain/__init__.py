@@ -29,6 +29,7 @@ from material_platform.domain.processing import ProcessingRun
 from material_platform.domain.research_material import (
     ContentLocation,
     ContentUnit,
+    MaterialFile,
     MaterialProvenance,
     ResearchMaterial,
     format_location,
@@ -53,6 +54,7 @@ __all__ = [
     "MaterialAnalysis",
     "MaterialArtifact",
     "MaterialClassification",
+    "MaterialFile",
     "MaterialProvenance",
     "MaterialStatus",
     "MaterialType",

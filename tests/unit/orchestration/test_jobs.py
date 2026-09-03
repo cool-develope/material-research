@@ -13,7 +13,7 @@ from tests.unit.discovery.trees import make_mixed_tree, zip_contents
 
 
 def _platform(tmp_path: Path) -> PlatformResource:
-    return PlatformResource(data_dir=str(tmp_path / "data"))
+    return PlatformResource(data_dir=str(tmp_path / "data"), use_sqlite=True)
 
 
 def _materials(platform: PlatformResource) -> list:
@@ -92,11 +92,15 @@ def test_reingest_job_after_restart_does_not_duplicate(tmp_path: Path) -> None:
     }
     first = ingest_source_job.execute_in_process(
         run_config=run_config,
-        resources={"platform": PlatformResource(data_dir=data_dir)},
+        resources={
+            "platform": PlatformResource(data_dir=data_dir, use_sqlite=True)
+        },
     )
     second = ingest_source_job.execute_in_process(
         run_config=run_config,
-        resources={"platform": PlatformResource(data_dir=data_dir)},
+        resources={
+            "platform": PlatformResource(data_dir=data_dir, use_sqlite=True)
+        },
     )
     assert first.success and second.success
     assert first.output_for_node("ingest_source") == second.output_for_node(

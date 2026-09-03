@@ -5,13 +5,13 @@ import sys
 from pathlib import Path
 
 from material_platform.agent.service import ResearchAgent
-from material_platform.agent.trace import make_tracer, recorded
 from material_platform.analysis import make_llm_client
 from material_platform.application.chat_history import ChatHistoryService
 from material_platform.application.deep_research import DeepResearchService
 from material_platform.application.local import sqlite_settings
 from material_platform.application.runtime import Runtime
 from material_platform.config import Settings
+from material_platform.infrastructure.tracing.trace import make_tracer, recorded
 
 
 def main(argv: list[str] | None = None) -> int:

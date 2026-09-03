@@ -1,14 +1,14 @@
 from material_platform.analysis.deterministic import DeterministicAnalyzer
 from material_platform.analysis.llm import LlmAnalyzer
-from material_platform.analysis.openai_compat import OpenAICompatClient
-from material_platform.analysis.profile import MaterialProfile
-from material_platform.analysis.protocol import Analyzer, LlmClient
 from material_platform.classification.deterministic import ClassificationDecision
 from material_platform.config import Settings
 from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.material import Material
+from material_platform.domain.profile import MaterialProfile
+from material_platform.domain.protocols import Analyzer, LlmClient
 from material_platform.domain.research_material import ContentUnit
 from material_platform.extraction.common import MaterialFile
+from material_platform.infrastructure.llm.openai_compat import OpenAICompatClient
 
 
 class FallbackAnalyzer:

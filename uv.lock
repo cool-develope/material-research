@@ -1075,6 +1075,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "dagster" },
+    { name = "dagster-webserver" },
     { name = "fastapi" },
     { name = "langfuse" },
     { name = "langgraph" },
@@ -1095,7 +1096,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "dagster-webserver" },
     { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
@@ -1107,6 +1107,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2" },
     { name = "dagster", specifier = ">=1.13,<1.15" },
+    { name = "dagster-webserver", specifier = ">=1.13,<1.15" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "langfuse", specifier = ">=2.0,<5" },
     { name = "langgraph", specifier = ">=0.2,<1" },
@@ -1127,7 +1128,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "dagster-webserver", specifier = ">=1.13,<1.15" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=1.16" },
     { name = "pytest", specifier = ">=8" },

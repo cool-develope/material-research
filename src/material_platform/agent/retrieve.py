@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from material_platform.agent.models import SearchAttempt
 from material_platform.agent.state import AgentState
-from material_platform.agent.trace import Tracer
 from material_platform.domain.citation import Citation
-from material_platform.index.payload import MATERIAL_UNIT_ID
+from material_platform.domain.research import SearchAttempt
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.tracing.trace import Tracer
 
 SelectFn = Callable[..., tuple[Citation, ...]]
 

@@ -2,12 +2,13 @@ from uuid import uuid4
 
 import pytest
 
-from material_platform.agent.models import MAX_SELECT_CALLS, ChatTurn
 from material_platform.agent.service import ResearchAgent
-from material_platform.agent.trace import RecordingTracer
+from material_platform.domain.budgets import MAX_SELECT_CALLS
 from material_platform.domain.citation import Citation
+from material_platform.domain.research import ChatTurn
 from material_platform.domain.research_material import ContentLocation
-from material_platform.index.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.qdrant.payload import MATERIAL_UNIT_ID
+from material_platform.infrastructure.tracing.trace import RecordingTracer
 
 
 def _hit(
@@ -287,13 +288,13 @@ def test_planner_sees_compact_request_not_prior_report() -> None:
 
 def test_continue_state_compacts_older_turns() -> None:
     from material_platform.agent.compact import RECENT_TURNS
-    from material_platform.agent.models import (
+    from material_platform.agent.state import AgentState, continue_state
+    from material_platform.domain.research import (
         ResearchPlan,
         ResearchQuestion,
         ResearchReport,
         ResearchRequest,
     )
-    from material_platform.agent.state import AgentState, continue_state
 
     previous = AgentState(
         query="latest",
@@ -404,8 +405,8 @@ def test_extract_strips_snippets_from_persisted_evidence() -> None:
 
 def test_extract_maps_pending_in_token_batches() -> None:
     from material_platform.agent.extract import extract_pending
-    from material_platform.agent.models import ResearchPlan, ResearchQuestion
     from material_platform.agent.state import AgentState
+    from material_platform.domain.research import ResearchPlan, ResearchQuestion
 
     calls = {"n": 0}
 
@@ -549,14 +550,14 @@ def test_report_sections_follow_questions() -> None:
 
 def test_validator_drops_summary_only_finding() -> None:
     from material_platform.agent.findings import build_findings
-    from material_platform.agent.models import (
+    from material_platform.agent.state import AgentState
+    from material_platform.agent.synthesizer import write_report
+    from material_platform.agent.validate import validate_report
+    from material_platform.domain.research import (
         EvidenceItem,
         ResearchPlan,
         ResearchQuestion,
     )
-    from material_platform.agent.state import AgentState
-    from material_platform.agent.synthesizer import write_report
-    from material_platform.agent.validate import validate_report
 
     empty = Citation(
         material_id=uuid4(),
@@ -581,7 +582,7 @@ def test_validator_drops_summary_only_finding() -> None:
             citation=empty,
         )
     ]
-    from material_platform.agent.models import QuestionState
+    from material_platform.domain.research import QuestionState
 
     state.questions = {"Q0": QuestionState(question_id="Q0")}
     tracer = RecordingTracer()
@@ -595,14 +596,14 @@ def test_validator_drops_summary_only_finding() -> None:
 
 def test_contradiction_is_kept_in_report() -> None:
     from material_platform.agent.findings import build_findings
-    from material_platform.agent.models import (
+    from material_platform.agent.state import AgentState
+    from material_platform.agent.synthesizer import write_report
+    from material_platform.domain.research import (
         EvidenceItem,
         QuestionState,
         ResearchPlan,
         ResearchQuestion,
     )
-    from material_platform.agent.state import AgentState
-    from material_platform.agent.synthesizer import write_report
 
     left = _hit("src/api.py", snippet="oauth")
     right = _hit("src/auth.py", snippet="no oauth")
@@ -640,13 +641,13 @@ def test_contradiction_is_kept_in_report() -> None:
 
 def test_findings_dedup_equivalent_claims() -> None:
     from material_platform.agent.findings import build_findings
-    from material_platform.agent.models import (
+    from material_platform.agent.state import AgentState
+    from material_platform.domain.research import (
         EvidenceItem,
         QuestionState,
         ResearchPlan,
         ResearchQuestion,
     )
-    from material_platform.agent.state import AgentState
 
     first = _hit("src/api.py", snippet="oauth")
     second = _hit("src/auth.py", snippet="oauth")

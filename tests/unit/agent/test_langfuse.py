@@ -1,5 +1,11 @@
-from material_platform.agent.langfuse_trace import LangfuseTracer
-from material_platform.agent.trace import TeeTracer, make_tracer, recorded
+from material_platform.infrastructure.tracing.langfuse_trace import (
+    LangfuseTracer,
+)
+from material_platform.infrastructure.tracing.trace import (
+    TeeTracer,
+    make_tracer,
+    recorded,
+)
 
 
 class _Node:
@@ -211,6 +217,8 @@ def test_make_tracer_passes_user_id() -> None:
 def test_langfuse_handler_off_without_keys(monkeypatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    from material_platform.agent.langfuse_trace import langfuse_handler
+    from material_platform.infrastructure.tracing.langfuse_trace import (
+        langfuse_handler,
+    )
 
     assert langfuse_handler() is None

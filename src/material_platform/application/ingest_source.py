@@ -40,10 +40,7 @@ from material_platform.infrastructure.database.repositories import (
     SourceRepository,
 )
 from material_platform.infrastructure.object_store.digest import sha256_stream
-from material_platform.infrastructure.object_store.paths import (
-    material_content_root,
-    raw_original,
-)
+from material_platform.infrastructure.object_store.paths import material_content_root
 from material_platform.infrastructure.object_store.protocol import ObjectStore
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 
@@ -186,15 +183,11 @@ class IngestSourceService:
             return existing.model_copy(update={"status": SourceStatus.DISCOVERING})
 
         source_id = uuid4()
-        raw_uri = raw_original(source_id)
-        if path.is_file():
-            with path.open("rb") as handle:
-                self._store.put(uri=raw_uri, data=handle, size=size)
         source = Source(
             source_id=source_id,
             source_type=source_type,
             original_name=path.name,
-            raw_uri=raw_uri if path.is_file() else f"file://{path}",
+            raw_uri=f"file://{path}",  # run locator only; archive is not retained
             sha256=digest,
             size_bytes=size,
             created_at=datetime.now(UTC),

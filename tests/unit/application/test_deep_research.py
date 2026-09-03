@@ -2,17 +2,17 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from material_platform.agent.trace import RecordingTracer
 from material_platform.analysis import ANALYZER, ANALYZER_VERSION
 from material_platform.application.deep_research import DeepResearchService
+from material_platform.application.index import IndexService
 from material_platform.application.ingest_source import IngestSourceService
 from material_platform.application.process_material import ProcessMaterialService
 from material_platform.discovery.archive import ArchiveLimits
-from material_platform.index import IndexService
 from material_platform.infrastructure.object_store import (
     FilesystemObjectStore,
     material_artifact,
 )
+from material_platform.infrastructure.tracing.trace import RecordingTracer
 from material_platform.infrastructure.workspace import TemporaryWorkspace
 from tests.unit.discovery.artifacts import write_wheel
 from tests.unit.discovery.trees import (

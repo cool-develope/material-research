@@ -15,6 +15,7 @@ from material_platform.analysis.profiler import (
     build_profile,
 )
 from material_platform.application.content import load_material_files
+from material_platform.application.index import IndexService
 from material_platform.application.queue import WorkQueue
 from material_platform.classification import (
     CLASSIFIER,
@@ -30,7 +31,6 @@ from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentUnit, ResearchMaterial
 from material_platform.extraction import EXTRACTOR, EXTRACTOR_VERSION, extract_units
 from material_platform.extraction.common import MaterialFile
-from material_platform.index import IndexService
 from material_platform.infrastructure.database.repositories import (
     ArtifactRepository,
     ClassificationRepository,
