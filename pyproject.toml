@@ -3,6 +3,7 @@ name = "material-platform"
 version = "0.1.0"
 description = "Discover, process, and index research materials"
 readme = "README.md"
+license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "pydantic>=2.11,<3",
