@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from material_platform.agent.compact import clip_answer
@@ -8,7 +10,13 @@ from material_platform.infrastructure.database.chat_history import (
     ChatHistoryRepository,
     StoredChatThread,
     StoredChatThreadSummary,
+    ThreadAccessError,
 )
+
+__all__ = [
+    "ChatHistoryService",
+    "ThreadAccessError",
+]
 
 
 class ChatHistoryService:
@@ -22,6 +30,7 @@ class ChatHistoryService:
         query: str,
         report: ResearchReport,
         mode: str,
+        user_id: UUID | None = None,
     ) -> None:
         self._repo.append_turn(
             thread_id,
@@ -29,16 +38,32 @@ class ChatHistoryService:
             answer=report.text,
             summary=report.summary.strip() or None,
             mode=mode,
+            user_id=user_id,
         )
 
-    def get(self, thread_id: str) -> StoredChatThread | None:
-        return self._repo.get_thread(thread_id)
+    def get(
+        self,
+        thread_id: str,
+        *,
+        user_id: UUID | None = None,
+    ) -> StoredChatThread | None:
+        return self._repo.get_thread(thread_id, user_id=user_id)
 
-    def list_threads(self, *, limit: int = 50) -> list[StoredChatThreadSummary]:
-        return list(self._repo.list_threads(limit=limit))
+    def list_threads(
+        self,
+        *,
+        user_id: UUID | None = None,
+        limit: int = 50,
+    ) -> list[StoredChatThreadSummary]:
+        return list(self._repo.list_threads(user_id=user_id, limit=limit))
 
-    def compact_turns(self, thread_id: str) -> list[ChatTurn]:
-        thread = self.get(thread_id)
+    def compact_turns(
+        self,
+        thread_id: str,
+        *,
+        user_id: UUID | None = None,
+    ) -> list[ChatTurn]:
+        thread = self.get(thread_id, user_id=user_id)
         if thread is None:
             return []
         turns: list[ChatTurn] = []

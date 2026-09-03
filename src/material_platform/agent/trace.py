@@ -140,6 +140,7 @@ def make_tracer(
     secret_key: str | None = None,
     host: str = "https://cloud.langfuse.com",
     session_id: str | None = None,
+    user_id: str | None = None,
     recording: bool = False,
     client: object | None = None,
 ) -> Tracer:
@@ -153,6 +154,7 @@ def make_tracer(
                 secret_key=secret_key,
                 host=host,
                 session_id=session_id,
+                user_id=user_id,
                 client=client,
             )
         except Exception:

@@ -21,6 +21,7 @@ class LangfuseTracer(Tracer):
         secret_key: str | None = None,
         host: str = "https://cloud.langfuse.com",
         session_id: str | None = None,
+        user_id: str | None = None,
         client: object | None = None,
     ) -> None:
         self._client = client if client is not None else _connect(
@@ -28,6 +29,7 @@ class LangfuseTracer(Tracer):
         )
         self._kind = _kind(self._client)
         self._session_id = session_id
+        self._user_id = user_id
         self._stack: list[Any] = []
         self._trace: Any = None
         self._trace_id: str | None = None
@@ -36,6 +38,8 @@ class LangfuseTracer(Tracer):
             kwargs: dict[str, object] = {"name": "deep-research"}
             if session_id:
                 kwargs["session_id"] = session_id
+            if user_id:
+                kwargs["user_id"] = user_id
             self._trace = self._client.trace(**kwargs)
 
     @contextmanager
@@ -43,6 +47,8 @@ class LangfuseTracer(Tracer):
         payload = meta(attrs)
         if self._session_id:
             payload.setdefault("session_id", self._session_id)
+        if self._user_id:
+            payload.setdefault("user_id", self._user_id)
         if self._kind == "observation":
             ctx = self._client.start_as_current_observation(
                 as_type="span", name=name, metadata=payload, input=payload
@@ -50,6 +56,7 @@ class LangfuseTracer(Tracer):
             with ctx as obs:
                 self._stack.append(obs)
                 self._remember()
+                self._apply_identity()
                 try:
                     yield
                 finally:
@@ -60,6 +67,7 @@ class LangfuseTracer(Tracer):
             with ctx as obs:
                 self._stack.append(obs)
                 self._remember()
+                self._apply_identity()
                 try:
                     yield
                 finally:
@@ -142,6 +150,22 @@ class LangfuseTracer(Tracer):
             self._url = url
         return url
 
+    def _apply_identity(self) -> None:
+        update = getattr(self._client, "update_current_trace", None)
+        if not callable(update):
+            return
+        payload: dict[str, str] = {}
+        if self._session_id:
+            payload["session_id"] = self._session_id
+        if self._user_id:
+            payload["user_id"] = self._user_id
+        if not payload:
+            return
+        try:
+            update(**payload)
+        except TypeError:
+            return
+
     def _remember(self) -> None:
         get_id = getattr(self._client, "get_current_trace_id", None)
         if callable(get_id) and not self._trace_id:
@@ -161,11 +185,14 @@ class LangfuseTracer(Tracer):
             self._url = url
 
 
-def langfuse_handler(*, session_id: str | None = None) -> object | None:
+def langfuse_handler(
+    *,
+    session_id: str | None = None,
+    user_id: str | None = None,
+) -> object | None:
     """Official LangGraph/LangChain callback. None when keys are unset."""
     import os
 
-    _ = session_id
     if not os.environ.get("LANGFUSE_PUBLIC_KEY") or not os.environ.get(
         "LANGFUSE_SECRET_KEY"
     ):
@@ -177,8 +204,18 @@ def langfuse_handler(*, session_id: str | None = None) -> object | None:
             from langfuse.callback import CallbackHandler
         except ImportError:
             return None
+    kwargs: dict[str, str] = {}
+    if session_id:
+        kwargs["session_id"] = session_id
+    if user_id:
+        kwargs["user_id"] = user_id
     try:
-        return CallbackHandler()
+        return CallbackHandler(**kwargs)
+    except TypeError:
+        try:
+            return CallbackHandler()
+        except Exception:
+            return None
     except Exception:
         return None
 

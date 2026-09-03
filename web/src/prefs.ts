@@ -9,14 +9,14 @@ import {
   type ReactNode,
 } from "react";
 
+import { loadMe, signOut as apiSignOut } from "./api/client";
+import type { User } from "./api/types";
+
 export type ThemeName = "light" | "dark";
 
-export type Profile = {
-  name: string;
-};
+export type Profile = User;
 
 const THEME_KEY = "mp.theme";
-const PROFILE_KEY = "mp.profile";
 
 type ThemeContextValue = {
   theme: ThemeName;
@@ -25,8 +25,9 @@ type ThemeContextValue = {
 
 type ProfileContextValue = {
   profile: Profile | null;
-  signIn: (name: string) => void;
-  signOut: () => void;
+  ready: boolean;
+  refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -55,28 +56,6 @@ export function applyTheme(theme: ThemeName) {
   document.documentElement.style.colorScheme = theme;
 }
 
-function readProfile(): Profile | null {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "name" in parsed &&
-      typeof parsed.name === "string" &&
-      parsed.name.trim()
-    ) {
-      return { name: parsed.name.trim() };
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<ThemeName>(readTheme);
   useEffect(() => {
@@ -102,22 +81,29 @@ export function useTheme(): ThemeContextValue {
 }
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<Profile | null>(readProfile);
-  const signIn = useCallback((name: string) => {
-    const next = { name: name.trim() };
-    if (!next.name) {
-      return;
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [ready, setReady] = useState(false);
+  const refresh = useCallback(async () => {
+    try {
+      setProfile(await loadMe());
+    } catch {
+      setProfile(null);
     }
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
-    setProfile(next);
   }, []);
-  const signOut = useCallback(() => {
-    localStorage.removeItem(PROFILE_KEY);
+  useEffect(() => {
+    void refresh().finally(() => setReady(true));
+  }, [refresh]);
+  const signOut = useCallback(async () => {
+    try {
+      await apiSignOut();
+    } catch {
+      /* still clear local session */
+    }
     setProfile(null);
   }, []);
   const value = useMemo(
-    () => ({ profile, signIn, signOut }),
-    [profile, signIn, signOut],
+    () => ({ profile, ready, refresh, signOut }),
+    [profile, ready, refresh, signOut],
   );
   return createElement(ProfileContext.Provider, { value }, children);
 }

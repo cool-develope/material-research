@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -12,6 +12,10 @@ from material_platform.infrastructure.database.models import (
     ChatThreadRow,
 )
 from material_platform.infrastructure.database.repositories import BaseRepository
+
+
+class ThreadAccessError(LookupError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -51,12 +55,14 @@ class ChatHistoryRepository(BaseRepository):
         answer: str,
         summary: str | None,
         mode: str | None,
+        user_id: UUID | None = None,
     ) -> None:
         now = datetime.now(UTC)
         thread = self._session.get(ChatThreadRow, thread_id)
         if thread is None:
             thread = ChatThreadRow(
                 thread_id=thread_id,
+                user_id=user_id,
                 mode=mode,
                 created_at=now,
                 updated_at=now,
@@ -64,6 +70,14 @@ class ChatHistoryRepository(BaseRepository):
             self._session.add(thread)
             next_ordinal = 0
         else:
+            if user_id is None:
+                # Unsigned/legacy access: only allow when the thread is also unsigned.
+                if thread.user_id is not None:
+                    raise ThreadAccessError(thread_id)
+            else:
+                # Signed-in access: thread must belong to the same user.
+                if thread.user_id != user_id:
+                    raise ThreadAccessError(thread_id)
             thread.updated_at = now
             if mode:
                 thread.mode = mode
@@ -96,10 +110,23 @@ class ChatHistoryRepository(BaseRepository):
             )
         )
 
-    def get_thread(self, thread_id: str) -> StoredChatThread | None:
+    def get_thread(
+        self,
+        thread_id: str,
+        *,
+        user_id: UUID | None = None,
+    ) -> StoredChatThread | None:
         thread = self._session.get(ChatThreadRow, thread_id)
         if thread is None:
             return None
+        if user_id is None:
+            # Only return unsigned threads for anonymous/legacy reads.
+            if thread.user_id is not None:
+                return None
+        else:
+            # Only return threads owned by this user.
+            if thread.user_id != user_id:
+                return None
         rows = self._session.scalars(
             select(ChatMessageRow)
             .where(ChatMessageRow.thread_id == thread_id)
@@ -120,9 +147,17 @@ class ChatHistoryRepository(BaseRepository):
             ),
         )
 
-    def list_threads(self, *, limit: int = 50) -> tuple[StoredChatThreadSummary, ...]:
+    def list_threads(
+        self,
+        *,
+        user_id: UUID | None,
+        limit: int = 50,
+    ) -> tuple[StoredChatThreadSummary, ...]:
+        if user_id is None:
+            return ()
         threads = self._session.scalars(
             select(ChatThreadRow)
+            .where(ChatThreadRow.user_id == user_id)
             .order_by(ChatThreadRow.updated_at.desc())
             .limit(limit)
         ).all()

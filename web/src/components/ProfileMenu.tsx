@@ -1,16 +1,15 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import { initials, useProfile } from "../prefs";
 
 export function ProfileMenu() {
-  const { profile, signIn, signOut } = useProfile();
+  const { profile, ready, signOut } = useProfile();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(profile?.name ?? "");
   const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setName(profile?.name ?? "");
-  }, [profile]);
+  const authPage =
+    location.pathname === "/signin" || location.pathname === "/signup";
 
   useEffect(() => {
     if (!open) {
@@ -34,10 +33,12 @@ export function ProfileMenu() {
     };
   }, [open]);
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    signIn(name);
-    setOpen(false);
+  if (!ready) {
+    return <div className="g-account" />;
+  }
+
+  if (!profile && authPage) {
+    return null;
   }
 
   return (
@@ -55,57 +56,28 @@ export function ProfileMenu() {
           </span>
         </button>
       ) : (
-        <button
-          type="button"
-          className="g-signin"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
+        <Link className="g-signin" to="/signin?next=/chat">
           <PersonIcon />
           Sign in
-        </button>
+        </Link>
       )}
-      {open ? (
-        <div
-          className="g-account-pop"
-          role="dialog"
-          aria-label={profile ? "Account" : "Sign in"}
-        >
-          {profile ? (
-            <>
-              <span className="avatar lg" aria-hidden="true">
-                {initials(profile.name)}
-              </span>
-              <p className="g-account-name">{profile.name}</p>
-              <p className="g-account-plan">Deep Research</p>
-              <button
-                type="button"
-                className="g-account-out"
-                onClick={() => {
-                  signOut();
-                  setOpen(false);
-                }}
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <form className="g-account-form" onSubmit={submit}>
-              <p className="g-account-name">Sign in</p>
-              <p className="g-account-plan">Use a display name for this workspace.</p>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Your name"
-                aria-label="Display name"
-                autoComplete="name"
-                autoFocus
-              />
-              <button type="submit" disabled={!name.trim()}>
-                Continue
-              </button>
-            </form>
-          )}
+      {open && profile ? (
+        <div className="g-account-pop" role="dialog" aria-label="Account">
+          <span className="avatar lg" aria-hidden="true">
+            {initials(profile.name)}
+          </span>
+          <p className="g-account-name">{profile.name}</p>
+          <p className="g-account-plan">{profile.email}</p>
+          <button
+            type="button"
+            className="g-account-out"
+            onClick={() => {
+              void signOut();
+              setOpen(false);
+            }}
+          >
+            Sign out
+          </button>
         </div>
       ) : null}
     </div>

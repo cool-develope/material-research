@@ -16,6 +16,7 @@ export default defineConfig({
     proxy: {
       "/search": api,
       "/health": api,
+      "/auth": api,
       "/chats": api,
       "/materials": { target: api, bypass: spa },
       "/chat": { target: api, bypass: spa },

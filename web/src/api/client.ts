@@ -6,6 +6,7 @@ import type {
   MaterialDetail,
   MaterialType,
   SearchResponse,
+  User,
 } from "./types";
 
 export class ApiError extends Error {
@@ -25,12 +26,18 @@ async function parseError(response: Response): Promise<string> {
     if (typeof detail === "string") {
       return detail;
     }
+    if (Array.isArray(detail) && detail[0] && typeof detail[0] === "object") {
+      const first = detail[0] as { msg?: unknown };
+      if (typeof first.msg === "string") {
+        return first.msg;
+      }
+    }
   }
   return response.statusText || "Request failed";
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+  const response = await fetch(path, { credentials: "include" });
   if (!response.ok) {
     throw new ApiError(response.status, await parseError(response));
   }
@@ -41,6 +48,7 @@ async function postJson<T>(path: string, body: object): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -97,4 +105,38 @@ export async function loadChatHistory(
 export async function listChatThreads(): Promise<ChatThreadSummary[]> {
   const payload = await getJson<{ threads: ChatThreadSummary[] }>("/chats");
   return payload.threads;
+}
+
+export async function loadMe(): Promise<User | null> {
+  const response = await fetch("/auth/me", { credentials: "include" });
+  if (response.status === 401) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response));
+  }
+  return (await response.json()) as User;
+}
+
+export function signUp(input: {
+  name: string;
+  email: string;
+  password: string;
+  password_confirm: string;
+}): Promise<User> {
+  return postJson<User>("/auth/signup", input);
+}
+
+export function signIn(input: { email: string; password: string }): Promise<User> {
+  return postJson<User>("/auth/signin", input);
+}
+
+export async function signOut(): Promise<void> {
+  const response = await fetch("/auth/signout", {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response));
+  }
 }

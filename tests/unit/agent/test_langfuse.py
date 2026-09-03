@@ -36,7 +36,9 @@ class _V2:
         self.root: _Node | None = None
         self.flushed = False
 
-    def trace(self, name: str, session_id=None) -> _Node:
+    def trace(self, name: str, session_id=None, user_id=None) -> _Node:
+        self.session_id = session_id
+        self.user_id = user_id
         self.root = _Node(name)
         return self.root
 
@@ -186,6 +188,24 @@ def test_make_tracer_tees_recording_and_langfuse() -> None:
     assert log.generations[0].name == "plan"
     assert client.root is not None
     assert tracer.trace_url()
+
+
+def test_langfuse_v2_sets_user_id() -> None:
+    client = _V2()
+    tracer = LangfuseTracer(client=client, session_id="s1", user_id="u1")
+    assert client.session_id == "s1"
+    assert client.user_id == "u1"
+    with tracer.span("deep-research"):
+        pass
+    assert tracer._user_id == "u1"
+
+
+def test_make_tracer_passes_user_id() -> None:
+    client = _V2()
+    tracer = make_tracer(client=client, session_id="sid", user_id="uid")
+    assert isinstance(tracer, LangfuseTracer)
+    assert tracer._user_id == "uid"
+    assert client.user_id == "uid"
 
 
 def test_langfuse_handler_off_without_keys(monkeypatch) -> None:

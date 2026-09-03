@@ -17,6 +17,7 @@ import { AppTabs } from "../components/AppTabs";
 import { AskBox } from "../components/AskBox";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { ReportBody } from "../components/ReportBody";
+import { useProfile } from "../prefs";
 
 const IDEAS = [
   "Summarize indexed papers on retrieval-augmented generation",
@@ -27,6 +28,8 @@ const IDEAS = [
 export function ChatPage() {
   const { threadId } = useParams();
   const navigate = useNavigate();
+  const { profile, ready } = useProfile();
+  const next = threadId ? `/chat/${threadId}` : "/chat";
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<AgentMode>("quick");
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
@@ -42,13 +45,23 @@ export function ChatPage() {
   const turns = useMemo(() => pairTurns(messages), [messages]);
 
   useEffect(() => {
+    if (!ready || profile) {
+      return;
+    }
+    navigate(`/signin?next=${encodeURIComponent(next)}`, { replace: true });
+  }, [navigate, next, profile, ready]);
+
+  useEffect(() => {
+    if (!profile) {
+      return;
+    }
     listChatThreads()
       .then(setThreads)
       .catch(() => setThreads([]));
-  }, [threadId, messages.length]);
+  }, [threadId, messages.length, profile?.user_id, profile]);
 
   useEffect(() => {
-    if (!threadId) {
+    if (!threadId || !profile) {
       setMessages([]);
       setCitations([]);
       setHistoryReady(true);
@@ -275,6 +288,9 @@ function pairTurns(messages: ChatHistoryMessage[]) {
   const turns: { query: string; answer: string }[] = [];
   for (let index = 0; index < messages.length; index += 1) {
     const item = messages[index];
+    if (!item) {
+      continue;
+    }
     if (item.role !== "user") {
       continue;
     }

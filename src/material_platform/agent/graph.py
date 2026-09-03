@@ -225,25 +225,30 @@ def _config(
     thread_id: str,
 ) -> dict[str, object]:
     callbacks: list[object] = []
+    session = getattr(tracer, "_session_id", None)
+    user_id = getattr(tracer, "_user_id", None)
     if _has_langfuse(tracer):
         handler = langfuse_handler(
-            session_id=getattr(tracer, "_session_id", None) or thread_id
+            session_id=session or thread_id,
+            user_id=user_id if isinstance(user_id, str) else None,
         )
         if handler is not None:
             callbacks.append(handler)
-    session = getattr(tracer, "_session_id", None)
+    metadata: dict[str, object] = {
+        "query": clip(query),
+        "langfuse_session_id": session or thread_id,
+        "langfuse_tags": ["deep-research"],
+        "agent_mode": budgets.mode,
+        "thread_id": thread_id,
+    }
+    if isinstance(user_id, str) and user_id:
+        metadata["langfuse_user_id"] = user_id
     return {
         "run_name": "deep-research",
         "recursion_limit": budgets.select_calls * 5 + 16,
         "configurable": {"thread_id": thread_id},
         "callbacks": callbacks,
-        "metadata": {
-            "query": clip(query),
-            "langfuse_session_id": session or thread_id,
-            "langfuse_tags": ["deep-research"],
-            "agent_mode": budgets.mode,
-            "thread_id": thread_id,
-        },
+        "metadata": metadata,
     }
 
 

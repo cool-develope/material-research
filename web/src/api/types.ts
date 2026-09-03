@@ -100,3 +100,9 @@ export type ChatThreadSummary = {
   updated_at: string;
   messages: number;
 };
+
+export type User = {
+  user_id: string;
+  name: string;
+  email: string;
+};

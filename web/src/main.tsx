@@ -6,6 +6,8 @@ import { Layout } from "./components/Layout";
 import { ChatPage } from "./pages/ChatPage";
 import { MaterialPage } from "./pages/MaterialPage";
 import { SearchPage } from "./pages/SearchPage";
+import { SignInPage } from "./pages/SignInPage";
+import { SignUpPage } from "./pages/SignUpPage";
 import { ProfileProvider, ThemeProvider } from "./prefs";
 import "./index.css";
 
@@ -25,6 +27,8 @@ createRoot(root).render(
             <Route path="/materials/:materialId" element={<MaterialPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:threadId" element={<ChatPage />} />
+            <Route path="/signin" element={<SignInPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -109,6 +109,15 @@ def test_search_rejects_empty_and_unknown_type(tmp_path: Path) -> None:
 
 def test_chat_returns_cited_report(tmp_path: Path) -> None:
     with _client(tmp_path) as client:
+        client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada",
+                "email": "ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
         response = client.post(
             "/chat", json={"query": "handle_request", "mode": "quick"}
         )
@@ -123,6 +132,15 @@ def test_chat_returns_cited_report(tmp_path: Path) -> None:
 
 def test_chat_continues_thread(tmp_path: Path) -> None:
     with _client(tmp_path) as client:
+        client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada",
+                "email": "ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
         first = client.post("/chat", json={"query": "handle_request", "mode": "quick"})
         thread_id = first.json()["thread_id"]
         second = client.post(
@@ -142,6 +160,15 @@ def test_chat_continues_thread(tmp_path: Path) -> None:
 
 def test_chat_history_returns_full_transcript(tmp_path: Path) -> None:
     with _client(tmp_path) as client:
+        client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada",
+                "email": "ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
         first = client.post("/chat", json={"query": "handle_request", "mode": "quick"})
         thread_id = first.json()["thread_id"]
         client.post(
@@ -174,3 +201,119 @@ def test_chat_history_returns_full_transcript(tmp_path: Path) -> None:
     assert any(item["thread_id"] == thread_id for item in threads)
     assert any(item["title"] == "handle_request" for item in threads)
     assert missing.status_code == 404
+
+
+def test_auth_signup_signin_and_me(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        anonymous = client.get("/auth/me")
+        created = client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada Lovelace",
+                "email": "ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
+        me = client.get("/auth/me")
+        duplicate = client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada",
+                "email": "Ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
+        client.post("/auth/signout")
+        signed_out = client.get("/auth/me")
+        wrong = client.post(
+            "/auth/signin",
+            json={"email": "ada@example.com", "password": "wrongpass"},
+        )
+        again = client.post(
+            "/auth/signin",
+            json={"email": "ada@example.com", "password": "secret123"},
+        )
+        short = client.post(
+            "/auth/signup",
+            json={
+                "name": "Bob",
+                "email": "bob@example.com",
+                "password": "short",
+                "password_confirm": "short",
+            },
+        )
+    assert anonymous.status_code == 401
+    assert created.status_code == 200
+    body = created.json()
+    assert body["email"] == "ada@example.com"
+    assert body["name"] == "Ada Lovelace"
+    assert body["user_id"]
+    assert me.status_code == 200
+    assert me.json()["email"] == "ada@example.com"
+    assert duplicate.status_code == 409
+    assert signed_out.status_code == 401
+    assert wrong.status_code == 401
+    assert again.status_code == 200
+    assert again.json()["name"] == "Ada Lovelace"
+    assert short.status_code == 422
+
+
+def test_chats_are_scoped_to_signed_in_user(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        client.post(
+            "/auth/signup",
+            json={
+                "name": "Ada",
+                "email": "ada@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
+        first = client.post(
+            "/chat", json={"query": "handle_request", "mode": "quick"}
+        )
+        thread_id = first.json()["thread_id"]
+        listed = client.get("/chats")
+        history = client.get(f"/chat/{thread_id}")
+        client.post("/auth/signout")
+        hidden_list = client.get("/chats")
+        hidden_thread = client.get(f"/chat/{thread_id}")
+        client.post(
+            "/auth/signup",
+            json={
+                "name": "Bob",
+                "email": "bob@example.com",
+                "password": "secret123",
+                "password_confirm": "secret123",
+            },
+        )
+        other_list = client.get("/chats")
+        other_thread = client.get(f"/chat/{thread_id}")
+        other_continue = client.post(
+            "/chat",
+            json={
+                "query": "where is it defined",
+                "mode": "quick",
+                "thread_id": thread_id,
+            },
+        )
+        own = client.post("/chat", json={"query": "handle_request", "mode": "quick"})
+        own_list = client.get("/chats")
+    assert first.status_code == 200
+    assert listed.status_code == 200
+    threads = listed.json()["threads"]
+    assert any(item["thread_id"] == thread_id for item in threads)
+    assert any(item["title"] == "handle_request" for item in threads)
+    assert history.status_code == 200
+    assert hidden_list.json()["threads"] == []
+    assert hidden_thread.status_code == 401
+    assert other_list.json()["threads"] == []
+    assert other_thread.status_code == 404
+    assert other_continue.status_code == 404
+    assert own.status_code == 200
+    assert any(
+        item["thread_id"] == own.json()["thread_id"]
+        for item in own_list.json()["threads"]
+    )

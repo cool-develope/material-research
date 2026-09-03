@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { MaterialType } from "../api/types";
+import { useProfile } from "../prefs";
 import { searchHref } from "../searchSession";
 
 const TYPES: Array<MaterialType | ""> = [
@@ -22,12 +23,15 @@ export function AppTabs({
   onType,
   modes = "all",
 }: Props) {
-  const types = modes === "main" ? [""] : TYPES;
+  const types: Array<MaterialType | ""> =
+    modes === "main" ? [""] : TYPES;
+  const { profile } = useProfile();
+  const researchTo = profile ? "/chat" : "/signin?next=/chat";
   return (
     <nav className="g-tabs" aria-label="Mode">
       <Link
         className={active === "research" ? "g-tab on research" : "g-tab research"}
-        to="/chat"
+        to={researchTo}
       >
         <Sparkle />
         Research

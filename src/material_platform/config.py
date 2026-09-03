@@ -75,6 +75,7 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     redis_url: str | None = None
+    cookie_secure: bool = False
 
     @classmethod
     def settings_customise_sources(

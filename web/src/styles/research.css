@@ -289,7 +289,7 @@
 }
 
 .aimode-dock {
-  padding: 0 0 0.9rem;
+  padding: 0 0 0.55rem;
 }
 
 .ask-box {
@@ -322,31 +322,31 @@
 .ask-box.landing {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto;
   max-width: 46rem;
-  min-height: 7.4rem;
+  min-height: 4.4rem;
   margin: 0 auto;
-  align-items: end;
-  padding: 1rem 1rem 0.75rem;
+  align-items: center;
+  padding: 0.65rem 1rem 0.6rem;
   border-radius: 28px;
 }
 
 .ask-box.landing textarea {
-  grid-column: 1 / -1;
+  grid-column: 2;
   grid-row: 1;
-  min-height: 3.2rem;
-  max-height: 8rem;
+  min-height: 1.7rem;
+  max-height: 3.2rem;
 }
 
 .ask-box.landing .plus {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1;
   order: 0;
 }
 
 .ask-box.landing .budget {
   grid-column: 3;
-  grid-row: 2;
+  grid-row: 1;
 }
 
 .ask-box textarea {

@@ -38,7 +38,7 @@ export function AskBox({
         placeholder="Ask anything"
         aria-label="Research question"
         disabled={loading}
-        rows={landing ? 2 : 1}
+        rows={landing ? 1 : 1}
       />
       <span className="plus" aria-hidden="true">
         +

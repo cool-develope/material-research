@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from material_platform.agent.budgets import AgentMode
 from material_platform.agent.models import ReportSection
@@ -141,3 +141,53 @@ class ChatThreadListResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     ok: Literal[True]
+
+
+class SignUpRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+    password_confirm: str = Field(min_length=8, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("name is required")
+        return text
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        return _email(value)
+
+    @model_validator(mode="after")
+    def _passwords(self) -> SignUpRequest:
+        if self.password != self.password_confirm:
+            raise ValueError("passwords do not match")
+        return self
+
+
+class SignInRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        return _email(value)
+
+
+class UserResponse(BaseModel):
+    user_id: UUID
+    name: str
+    email: str
+
+
+def _email(value: str) -> str:
+    text = value.strip().lower()
+    local, _, domain = text.partition("@")
+    if not local or "." not in domain:
+        raise ValueError("valid email required")
+    return text
