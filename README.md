@@ -91,23 +91,41 @@ uv run mp eval \
   --lexical-only
 ```
 
-HTTP wraps the same Runtime (ingest stays a local path):
+That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
+
+## App (search + Deep Research)
+
+The UI talks to `mp serve`. Use the public AI/ML corpus (SLP3, QLoRA/LoRA/ReAct papers, Hugging Face trees, Alpaca CSV, DJL JAR) — not the three-file simple mix. The zip is gitignored; it is already built at `tests/fixtures/eval_aiml/research.zip` after `mp eval-aiml --build-only`.
+
+`--data-dir` is a local sqlite path (embedded Qdrant + files on disk). The app stack is compose: Postgres identities, MinIO bytes, Qdrant retrieval. `docker compose up -d` first. AIML prod ingest writes collection `research_aiml` (BGE-M3); do not query it with the hashed fake embedder.
 
 ```bash
-uv run mp serve --data-dir /tmp/mp-simple
+# Once, if the zip is missing:
+uv run mp eval-aiml --build-only
+
+# Once, if Qdrant collection research_aiml is empty:
+uv run mp eval-aiml --skip-build --prod --data-dir /tmp/mp-aiml-prod
 ```
 
-UI (Vite + React) proxies to that server:
+Two terminals:
 
 ```bash
+EMBEDDER=bge-m3 RERANKER=bge-v2-m3 QDRANT_COLLECTION=research_aiml \
+  uv run mp serve --postgres
+```
+
+Need Node 22+ (`npm`). Do not `apt install npm`. If `npm` is missing, put a local Node on `PATH` (this machine already has v22 at `~/.local/node`):
+
+```bash
+export PATH="$HOME/.local/node/bin:$PATH"
 cd web && npm install && npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Search is hop-1 material cards. Deep Research keeps `thread_id` in the URL and loads the full transcript from `GET /chat/{thread_id}`.
+Open [http://localhost:5173](http://localhost:5173). Search is hop-1 material cards (`Speech and Language Processing`, `4-bit NormalFloat`, `get_peft_model`). Deep Research is `/chat`; `thread_id` stays in the URL and `GET /chat/{thread_id}` loads the full transcript.
 
-`POST /search` `{query, page?, page_size?, material_type?}` returns ranked **materials** (hop-1 only, default 10 per page, max 20) and a Langfuse `trace_url` when keys are set. `POST /chat` `{query, mode?, thread_id?}` runs the Deep Research agent (`quick` | `standard` | `deep`) and returns a cited report plus `thread_id` (hop 1/2 stay 5/20). Pass `thread_id` back to continue the same chat. `GET /chat/{thread_id}` returns the full transcript from Postgres (`DATABASE_URL`, or sqlite under `--data-dir`). The agent still plans from a compact working set, not this transcript. Checkpoints go to sqlite under `--data-dir` (`langgraph.sqlite`) or Postgres database `langgraph` with `--postgres`. `GET /health` is liveness only. `--postgres` uses `DATABASE_URL` and Qdrant. Chat uses `LLM_BASE_URL` when set. CORS allows the Vite origin (`CORS_ORIGINS`).
+Local sqlite instead: `--data-dir /tmp/mp-aiml` after `uv run mp ingest tests/fixtures/eval_aiml/research.zip --data-dir /tmp/mp-aiml --process`. Tiny fixture: `--data-dir /tmp/mp-simple` after the simple_mix ingest above.
 
-That zip is three Materials (`paper.pdf`, `backend/`, `dataset/`). Use a **fresh `--data-dir`** per ingest so older sources are not mixed into sibling lists.
+`POST /search` `{query, page?, page_size?, material_type?}` returns ranked **materials** (hop-1 only, default 10 per page, max 20), `page_count` / `total` for the cached window (cap 100), and a Langfuse `trace_url` when keys are set. Query vectors and that hop-1 window are cached in Redis (`REDIS_URL`, compose Redis on `6379`, prefix `mp:`); paging does not re-embed. Memory cache is used when Redis is down. `POST /chat` `{query, mode?, thread_id?}` runs the Deep Research agent (`quick` | `standard` | `deep`) and returns a cited report plus `thread_id` (hop 1/2 stay 5/20). Pass `thread_id` back to continue the same chat. `GET /chat/{thread_id}` returns the full transcript from Postgres (`DATABASE_URL`, or sqlite under `--data-dir`). The agent still plans from a compact working set, not this transcript. Checkpoints go to sqlite under `--data-dir` (`langgraph.sqlite`) or Postgres database `langgraph` with `--postgres`. `GET /health` is liveness only. `--postgres` uses `DATABASE_URL`, MinIO, and Qdrant. Match `QDRANT_COLLECTION` and `EMBEDDER` to the ingest (AIML prod is `research_aiml` + `bge-m3`). Chat uses `LLM_BASE_URL` when set. CORS allows the Vite origin (`CORS_ORIGINS`).
 
 Citations look like `paper.pdf page 1` or `src/api.py lines 1-2`. `tests/` is not indexed.
 

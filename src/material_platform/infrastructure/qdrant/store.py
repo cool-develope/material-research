@@ -17,6 +17,10 @@ class QdrantIndexStore:
         self._collection = collection
         _ensure_collection(client, collection)
 
+    @property
+    def collection(self) -> str:
+        return self._collection
+
     def replace(self, material_id: UUID, points: list[models.PointStruct]) -> None:
         self.delete_material(material_id)
         if points:

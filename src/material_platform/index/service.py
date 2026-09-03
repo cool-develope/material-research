@@ -23,8 +23,9 @@ from material_platform.index.payload import (
     material_text,
     unit_text,
 )
+from material_platform.infrastructure.cache import QueryCache, make_query_cache
 from material_platform.infrastructure.embedding.factory import make_embedder
-from material_platform.infrastructure.embedding.protocol import Embedder
+from material_platform.infrastructure.embedding.protocol import EmbeddedText, Embedder
 from material_platform.infrastructure.qdrant.client import make_qdrant_client
 from material_platform.infrastructure.qdrant.store import QdrantIndexStore
 from material_platform.infrastructure.rerank import (
@@ -51,6 +52,12 @@ class SearchDetail:
     reranked: bool
 
 
+@dataclass(frozen=True)
+class MaterialSearch:
+    hits: tuple[ScoredEntry, ...]
+    total: int
+
+
 MATERIAL_HOP = 5
 UNIT_HOP = 20
 SEARCH_PAGE_DEFAULT = 10
@@ -64,10 +71,12 @@ class IndexService:
         store: QdrantIndexStore,
         embedder: Embedder,
         reranker: Reranker | None = None,
+        cache: QueryCache | None = None,
     ) -> None:
         self._store = store
         self._embedder = embedder
         self._reranker = reranker
+        self._cache = cache if cache is not None else QueryCache()
 
     def replace(self, research: ResearchMaterial) -> None:
         points = []
@@ -98,35 +107,14 @@ class IndexService:
         limit: int = SEARCH_PAGE_DEFAULT,
         material_type: str | None = None,
         tracer: object | None = None,
-    ) -> tuple[ScoredEntry, ...]:
+    ) -> MaterialSearch:
         log = tracer if tracer is not None else _NoopLog()
         if not query.strip() or limit < 1:
-            return ()
+            return MaterialSearch(hits=(), total=0)
         kind = _normalize_type(material_type)
-        model = _model_name(self._embedder)
-        with log.span("embed", model=model, chars=len(query)):
-            embedded = self._embedder.embed(query)
-            log.set_output(
-                {
-                    "model": model,
-                    "chars": len(query),
-                    "dense": len(embedded.dense),
-                    "sparse": len(embedded.sparse_indices),
-                }
-            )
-        with log.span("hop1", k=limit, offset=max(offset, 0), level="material"):
-            points = self._store.search(
-                dense=list(embedded.dense),
-                sparse_indices=list(embedded.sparse_indices),
-                sparse_values=list(embedded.sparse_values),
-                limit=limit,
-                offset=max(offset, 0),
-                level=LEVEL_MATERIAL,
-                material_type=kind,
-            )
-            hits = _scored_points(points)
-            log.set_output(_brief_materials(hits))
-        return hits
+        window = self._material_window(query, kind, log)
+        start = max(offset, 0)
+        return MaterialSearch(hits=window[start : start + limit], total=len(window))
 
     def search_detail(
         self,
@@ -140,17 +128,7 @@ class IndexService:
         if not query.strip():
             return SearchDetail(hop1=(), hop2=(), ranked=(), reranked=False)
         kind = _normalize_type(material_type)
-        model = _model_name(self._embedder)
-        with log.span("embed", model=model, chars=len(query)):
-            embedded = self._embedder.embed(query)
-            log.set_output(
-                {
-                    "model": model,
-                    "chars": len(query),
-                    "dense": len(embedded.dense),
-                    "sparse": len(embedded.sparse_indices),
-                }
-            )
+        embedded = self._embed(query, log)
         dense = list(embedded.dense)
         sparse_indices = list(embedded.sparse_indices)
         sparse_values = list(embedded.sparse_values)
@@ -213,6 +191,7 @@ class IndexService:
                     "chars": chars,
                     "cap": RERANK_CHARS if reranked else 0,
                     "top": _location_label(ranked[0].entry) if ranked else None,
+                    "selected": _brief_units(ranked)["selected"],
                 }
             )
         return SearchDetail(hop1=hop1, hop2=hop2, ranked=ranked, reranked=reranked)
@@ -222,6 +201,57 @@ class IndexService:
 
     def wipe(self) -> None:
         self._store.recreate()
+
+    def _embed(self, query: str, log: object) -> EmbeddedText:
+        model = _model_name(self._embedder)
+        key = self._cache.embed_key(model, query)
+        cached = _embedded_from(self._cache.get_json(key))
+        if cached is not None:
+            with log.span("embed", model=model, chars=len(query), cached=True):
+                log.set_output(_embed_output(model, query, cached))
+            return cached
+        with log.span("embed", model=model, chars=len(query)):
+            embedded = self._embedder.embed(query)
+            log.set_output(_embed_output(model, query, embedded))
+        self._cache.set_json(
+            key,
+            {
+                "dense": list(embedded.dense),
+                "sparse_indices": list(embedded.sparse_indices),
+                "sparse_values": list(embedded.sparse_values),
+            },
+        )
+        return embedded
+
+    def _material_window(
+        self, query: str, kind: str | None, log: object
+    ) -> tuple[ScoredEntry, ...]:
+        model = _model_name(self._embedder)
+        key = self._cache.window_key(
+            self._store.collection, model, query, kind or "all"
+        )
+        cached = _window_from(self._cache.get_json(key))
+        if cached is not None:
+            with log.span(
+                "hop1", k=SEARCH_WINDOW, offset=0, level="material", cached=True
+            ):
+                log.set_output(_brief_materials(cached))
+            return cached
+        embedded = self._embed(query, log)
+        with log.span("hop1", k=SEARCH_WINDOW, offset=0, level="material"):
+            points = self._store.search(
+                dense=list(embedded.dense),
+                sparse_indices=list(embedded.sparse_indices),
+                sparse_values=list(embedded.sparse_values),
+                limit=SEARCH_WINDOW,
+                offset=0,
+                level=LEVEL_MATERIAL,
+                material_type=kind,
+            )
+            hits = _scored_points(points)
+            log.set_output(_brief_materials(hits))
+        self._cache.set_json(key, _window_payload(hits))
+        return hits
 
 
 def _scored_points(hits: Sequence[object]) -> tuple[ScoredEntry, ...]:
@@ -272,13 +302,31 @@ def _model_name(obj: object | None) -> str:
 
 
 def _brief_materials(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
-    top = _clip(hits[0].entry.title) if hits else None
-    return {"hits": len(hits), "top": top}
+    selected = [
+        {
+            "title": _clip(item.entry.title),
+            "material_id": str(item.entry.material_id),
+            "score": round(item.score, 4),
+        }
+        for item in hits
+    ]
+    top = selected[0]["title"] if selected else None
+    return {"hits": len(hits), "top": top, "selected": selected}
 
 
 def _brief_units(hits: tuple[ScoredEntry, ...]) -> dict[str, object]:
-    top = _location_label(hits[0].entry) if hits else None
-    return {"hits": len(hits), "top": top}
+    selected = [
+        {
+            "citation": _location_label(item.entry),
+            "title": _clip(item.entry.title),
+            "material_id": str(item.entry.material_id),
+            "unit_id": item.entry.unit_id,
+            "score": round(item.score, 4),
+        }
+        for item in hits
+    ]
+    top = selected[0]["citation"] if selected else None
+    return {"hits": len(hits), "top": top, "selected": selected}
 
 
 def _location_label(entry: IndexEntry) -> str:
@@ -316,7 +364,68 @@ def _normalize_type(value: str | None) -> str | None:
 def make_index_service(settings: Settings) -> IndexService:
     client = make_qdrant_client(settings)
     store = QdrantIndexStore(client, settings.qdrant_collection)
-    return IndexService(store, make_embedder(settings), make_reranker(settings))
+    return IndexService(
+        store,
+        make_embedder(settings),
+        make_reranker(settings),
+        make_query_cache(settings.redis_url),
+    )
+
+
+def _embed_output(model: str, query: str, embedded: EmbeddedText) -> dict[str, object]:
+    return {
+        "model": model,
+        "chars": len(query),
+        "dense": len(embedded.dense),
+        "sparse": len(embedded.sparse_indices),
+    }
+
+
+def _embedded_from(raw: object) -> EmbeddedText | None:
+    if not isinstance(raw, dict):
+        return None
+    dense = raw.get("dense")
+    indices = raw.get("sparse_indices")
+    values = raw.get("sparse_values")
+    if not isinstance(dense, list) or not isinstance(indices, list):
+        return None
+    if not isinstance(values, list):
+        return None
+    return EmbeddedText(
+        dense=tuple(float(item) for item in dense),
+        sparse_indices=tuple(int(item) for item in indices),
+        sparse_values=tuple(float(item) for item in values),
+    )
+
+
+def _window_payload(hits: tuple[ScoredEntry, ...]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for item in hits:
+        entry = item.entry.model_dump(mode="json")
+        entry["content"] = item.entry.content[:180]
+        entry["tokens"] = ""
+        entry["embedding"] = []
+        rows.append({"score": item.score, "entry": entry})
+    return rows
+
+
+def _window_from(raw: object) -> tuple[ScoredEntry, ...] | None:
+    if not isinstance(raw, list):
+        return None
+    hits: list[ScoredEntry] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        score = item.get("score")
+        entry_raw = item.get("entry")
+        if not isinstance(score, (int, float)) or not isinstance(entry_raw, dict):
+            return None
+        try:
+            entry = IndexEntry.model_validate(entry_raw)
+        except Exception:
+            return None
+        hits.append(ScoredEntry(entry=entry, score=float(score)))
+    return tuple(hits)
 
 
 def _from_payload(point_id: object, payload: dict[str, object]) -> IndexEntry | None:

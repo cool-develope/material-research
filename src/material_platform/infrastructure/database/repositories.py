@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
@@ -294,6 +295,41 @@ class ArtifactRepository(BaseRepository):
         if row is None:
             return None
         return artifact_from_row(row)
+
+    def latest_of_type(
+        self, material_id: UUID, artifact_type: str
+    ) -> MaterialArtifact | None:
+        row = self._session.scalar(
+            select(MaterialArtifactRow)
+            .where(
+                MaterialArtifactRow.material_id == material_id,
+                MaterialArtifactRow.artifact_type == artifact_type,
+            )
+            .order_by(MaterialArtifactRow.created_at.desc())
+            .limit(1)
+        )
+        if row is None:
+            return None
+        return artifact_from_row(row)
+
+    def latest_for_ids(
+        self, material_ids: Sequence[UUID], artifact_type: str
+    ) -> dict[UUID, MaterialArtifact]:
+        if not material_ids:
+            return {}
+        rows = self._session.scalars(
+            select(MaterialArtifactRow)
+            .where(
+                MaterialArtifactRow.material_id.in_(tuple(material_ids)),
+                MaterialArtifactRow.artifact_type == artifact_type,
+            )
+            .order_by(MaterialArtifactRow.created_at.desc())
+        ).all()
+        found: dict[UUID, MaterialArtifact] = {}
+        for row in rows:
+            if row.material_id not in found:
+                found[row.material_id] = artifact_from_row(row)
+        return found
 
 
 class ProcessingRunRepository(BaseRepository):

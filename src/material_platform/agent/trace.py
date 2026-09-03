@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
 
 _CLIP = 400
+_CLIP_LLM = 32_000
 
 
 @dataclass
@@ -29,6 +30,9 @@ class Tracer:
         return None
 
     def set_output(self, value: object) -> None:
+        return None
+
+    def set_input(self, value: object) -> None:
         return None
 
     def trace_url(self) -> str | None:
@@ -65,13 +69,17 @@ class RecordingTracer(Tracer):
         self, name: str, prompt: str, output: str, **attrs: object
     ) -> None:
         payload = dict(attrs)
-        payload["prompt"] = clip(prompt)
-        payload["output"] = clip(output)
+        payload["prompt"] = clip_llm(prompt)
+        payload["output"] = clip_llm(output)
         self.generations.append(SpanEvent(name=name, attrs=payload))
 
     def set_output(self, value: object) -> None:
         if self._stack:
             self._stack[-1].attrs["output"] = value
+
+    def set_input(self, value: object) -> None:
+        if self._stack:
+            self._stack[-1].attrs["input"] = value
 
 
 class TeeTracer(Tracer):
@@ -102,6 +110,10 @@ class TeeTracer(Tracer):
     def set_output(self, value: object) -> None:
         for inner in self.inners:
             inner.set_output(value)
+
+    def set_input(self, value: object) -> None:
+        for inner in self.inners:
+            inner.set_input(value)
 
     def trace_url(self) -> str | None:
         for inner in self.inners:
@@ -156,6 +168,12 @@ def clip(text: str) -> str:
     if len(stripped) <= _CLIP:
         return stripped
     return stripped[: _CLIP - 1] + "…"
+
+
+def clip_llm(text: str, *, limit: int = _CLIP_LLM) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 def meta(attrs: dict[str, object]) -> dict[str, str | int | float | bool]:

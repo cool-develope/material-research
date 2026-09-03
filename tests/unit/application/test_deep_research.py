@@ -73,19 +73,23 @@ def test_search_lists_materials_without_unit_locators(
     index: IndexService,
 ) -> None:
     _ingest_and_process(session, tmp_path, index)
-    page = DeepResearchService(session, index).search(
+    store = FilesystemObjectStore(tmp_path / "store")
+    page = DeepResearchService(session, index, store).search(
         "handle_request", offset=0, limit=10
     )
     assert page.results
     assert all(hit.root_path for hit in page.results)
     assert all(hit.material_type for hit in page.results)
-    first = DeepResearchService(session, index).search(
+    assert any(hit.snippet for hit in page.results)
+    first = DeepResearchService(session, index, store).search(
         "handle_request", offset=0, limit=1
     )
     second = DeepResearchService(session, index).search(
         "handle_request", offset=1, limit=1
     )
     assert first.has_more
+    assert first.page_count >= 2
+    assert first.total >= 2
     assert first.results[0].material_id != second.results[0].material_id
 
 
@@ -133,9 +137,20 @@ def test_select_traces_hop1_hop2_rerank(
     assert isinstance(hop1_out["hits"], int)
     assert hop1_out["hits"] >= 1
     assert hop1_out["top"]
+    selected = hop1_out["selected"]
+    assert isinstance(selected, list) and selected
+    assert "title" in selected[0]
+    assert "material_id" in selected[0]
+    assert "score" in selected[0]
+    assert "content" not in selected[0]
     hop2_out = hop2.attrs["output"]
     assert isinstance(hop2_out, dict)
     assert "src/api.py" in str(hop2_out["top"])
+    units = hop2_out["selected"]
+    assert isinstance(units, list) and units
+    assert "src/api.py" in str(units[0]["citation"])
+    assert "content" not in units[0]
+    assert "snippet" not in units[0]
     rerank_out = rerank.attrs["output"]
     assert isinstance(rerank_out, dict)
     assert rerank_out["enabled"] is False

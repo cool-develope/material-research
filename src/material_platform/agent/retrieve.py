@@ -37,7 +37,13 @@ def retrieve_one(
         )
         with tracer.span("diversity", per_material=state.budgets.units_per_material):
             trimmed = _diversity(hits, per_material=state.budgets.units_per_material)
-            tracer.set_output({"in": len(hits), "kept": len(trimmed)})
+            tracer.set_output(
+                {
+                    "in": len(hits),
+                    "kept": len(trimmed),
+                    "selected": _trace_hits(trimmed),
+                }
+            )
         state.pending = list(trimmed)
         state.pending_question = question_id
         current = state.questions[question_id]
@@ -69,6 +75,8 @@ def retrieve_one(
                 "question_id": question_id,
                 "hits": len(trimmed),
                 "top": trimmed[0].citation if trimmed else None,
+                "materials": _trace_materials(trimmed),
+                "selected": _trace_hits(trimmed),
             }
         )
     return state
@@ -87,3 +95,27 @@ def _diversity(
         counts[key] = used + 1
         kept.append(hit)
     return tuple(kept)
+
+
+def _trace_hits(hits: tuple[Citation, ...]) -> list[dict[str, object]]:
+    return [
+        {
+            "citation": hit.citation,
+            "title": hit.title,
+            "material_id": str(hit.material_id),
+            "score": round(hit.score, 4),
+        }
+        for hit in hits
+    ]
+
+
+def _trace_materials(hits: tuple[Citation, ...]) -> list[dict[str, str]]:
+    seen: set[str] = set()
+    materials: list[dict[str, str]] = []
+    for hit in hits:
+        key = str(hit.material_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        materials.append({"material_id": key, "title": hit.title})
+    return materials

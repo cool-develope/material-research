@@ -6,15 +6,22 @@ from uuid import uuid4
 from langgraph.graph import END, START, StateGraph
 
 from material_platform.agent.budgets import STANDARD, AgentBudgets
-from material_platform.agent.coverage import cover_state, follow_up_state, has_work
+from material_platform.agent.context import for_plan
+from material_platform.agent.coverage import gap_check, has_work, needs_retrieve
 from material_platform.agent.extract import extract_pending
 from material_platform.agent.findings import build_findings
 from material_platform.agent.langfuse_trace import langfuse_handler
-from material_platform.agent.memory import recall, remember
-from material_platform.agent.models import ResearchReport
+from material_platform.agent.llm import named_llm
+from material_platform.agent.memory import remember
+from material_platform.agent.models import ChatTurn, ResearchReport
 from material_platform.agent.planner import plan_state
 from material_platform.agent.retrieve import SelectFn, retrieve_one
-from material_platform.agent.state import AgentState, bootstrap, continue_state
+from material_platform.agent.state import (
+    AgentState,
+    bootstrap,
+    continue_state,
+    state_from_turns,
+)
 from material_platform.agent.synthesizer import write_report
 from material_platform.agent.trace import Tracer, clip
 from material_platform.agent.validate import validate_report
@@ -36,6 +43,7 @@ def run_agent(
     checkpointer: Any = None,
     store: Any = None,
     thread_id: str | None = None,
+    prior_turns: list[ChatTurn] | None = None,
 ) -> tuple[AgentState, str]:
     thread = (thread_id or "").strip() or str(uuid4())
     saver = checkpointer
@@ -46,12 +54,8 @@ def run_agent(
     compiled = _compile(select, tracer=tracer, client=client, checkpointer=saver)
     config = _config(query, tracer, budgets, thread_id=thread)
     previous = _saved_state(compiled, config)
-    if previous is not None:
-        with tracer.span("compact", thread_id=thread, query=query):
-            start = continue_state(previous, query, budgets, client=client)
-            start.recalled = recall(store, thread, query)
-    else:
-        start = bootstrap(query, budgets)
+    if previous is None and prior_turns:
+        previous = state_from_turns(prior_turns, budgets)
     with tracer.span(
         "deep-research",
         query=query,
@@ -60,6 +64,10 @@ def run_agent(
         thread_id=thread,
         continued=previous is not None,
     ):
+        if previous is not None:
+            start = _compact(previous, query, budgets, tracer, client, thread)
+        else:
+            start = bootstrap(query, budgets)
         result = compiled.invoke({"state": start}, config=config)
         state = result["state"]
         tracer.event(
@@ -82,6 +90,50 @@ def run_agent(
     tracer.flush()
     remember(store, thread, state)
     return state, thread
+
+
+def _compact(
+    previous: AgentState,
+    query: str,
+    budgets: AgentBudgets,
+    tracer: Tracer,
+    client: LlmClient | None,
+    thread: str,
+) -> AgentState:
+    with tracer.span("compact", thread_id=thread, query=query):
+        start = continue_state(
+            previous,
+            query,
+            budgets,
+            client=named_llm(client, tracer, "compact"),
+        )
+        tracer.set_input(
+            {
+                "query": query,
+                "previous_query": previous.query,
+                "previous_turns": len(previous.conversation),
+            }
+        )
+        tracer.set_output(
+            {
+                "context": for_plan(start),
+                "turns": [
+                    {"query": turn.query, "answer": turn.answer}
+                    for turn in start.conversation
+                ],
+                "summary": (
+                    {
+                        "main_goal": start.summary.main_goal,
+                        "current_focus": start.summary.current_focus,
+                        "text": start.summary.text,
+                    }
+                    if start.summary is not None
+                    else None
+                ),
+                "prior_research": start.prior_research,
+            }
+        )
+    return start
 
 
 def report_of(state: AgentState) -> ResearchReport:
@@ -116,17 +168,17 @@ def _compile(
     def _plan(g: GraphState) -> GraphState:
         return {"state": plan_state(g["state"], tracer=tracer, client=client)}
 
+    def _after_plan(g: GraphState) -> str:
+        return "retrieve" if needs_retrieve(g["state"]) else "write"
+
     def _retrieve(g: GraphState) -> GraphState:
         return {"state": retrieve_one(g["state"], select, tracer=tracer)}
 
     def _extract(g: GraphState) -> GraphState:
         return {"state": extract_pending(g["state"], tracer=tracer, client=client)}
 
-    def _cover(g: GraphState) -> GraphState:
-        return {"state": cover_state(g["state"], tracer=tracer)}
-
-    def _follow(g: GraphState) -> GraphState:
-        return {"state": follow_up_state(g["state"], tracer=tracer, client=client)}
+    def _gap(g: GraphState) -> GraphState:
+        return {"state": gap_check(g["state"], tracer=tracer, client=client)}
 
     def _route(g: GraphState) -> str:
         return "retrieve" if has_work(g["state"]) else "findings"
@@ -144,18 +196,18 @@ def _compile(
     graph.add_node("plan", _plan)
     graph.add_node("retrieve", _retrieve)
     graph.add_node("extract", _extract)
-    graph.add_node("cover", _cover)
-    graph.add_node("follow_up", _follow)
+    graph.add_node("gap", _gap)
     graph.add_node("findings", _findings)
     graph.add_node("write", _write)
     graph.add_node("validate", _validate)
     graph.add_edge(START, "plan")
-    graph.add_edge("plan", "retrieve")
-    graph.add_edge("retrieve", "extract")
-    graph.add_edge("extract", "cover")
-    graph.add_edge("cover", "follow_up")
     graph.add_conditional_edges(
-        "follow_up", _route, {"retrieve": "retrieve", "findings": "findings"}
+        "plan", _after_plan, {"retrieve": "retrieve", "write": "write"}
+    )
+    graph.add_edge("retrieve", "extract")
+    graph.add_edge("extract", "gap")
+    graph.add_conditional_edges(
+        "gap", _route, {"retrieve": "retrieve", "findings": "findings"}
     )
     graph.add_edge("findings", "write")
     graph.add_edge("write", "validate")

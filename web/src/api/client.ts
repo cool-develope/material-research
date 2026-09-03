@@ -2,6 +2,8 @@ import type {
   AgentMode,
   ChatHistoryResponse,
   ChatResponse,
+  ChatThreadSummary,
+  MaterialDetail,
   MaterialType,
   SearchResponse,
 } from "./types";
@@ -25,6 +27,14 @@ async function parseError(response: Response): Promise<string> {
     }
   }
   return response.statusText || "Request failed";
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response));
+  }
+  return (await response.json()) as T;
 }
 
 async function postJson<T>(path: string, body: object): Promise<T> {
@@ -53,6 +63,10 @@ export function searchMaterials(input: {
   });
 }
 
+export function loadMaterial(materialId: string): Promise<MaterialDetail> {
+  return getJson<MaterialDetail>(`/materials/${encodeURIComponent(materialId)}`);
+}
+
 export function runChat(input: {
   query: string;
   mode?: AgentMode;
@@ -68,12 +82,19 @@ export function runChat(input: {
 export async function loadChatHistory(
   threadId: string,
 ): Promise<ChatHistoryResponse> {
-  const response = await fetch(`/chat/${encodeURIComponent(threadId)}`);
-  if (response.status === 404) {
-    throw new ApiError(404, "thread not found");
+  try {
+    return await getJson<ChatHistoryResponse>(
+      `/chat/${encodeURIComponent(threadId)}`,
+    );
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw new ApiError(404, "thread not found");
+    }
+    throw err;
   }
-  if (!response.ok) {
-    throw new ApiError(response.status, await parseError(response));
-  }
-  return (await response.json()) as ChatHistoryResponse;
+}
+
+export async function listChatThreads(): Promise<ChatThreadSummary[]> {
+  const payload = await getJson<{ threads: ChatThreadSummary[] }>("/chats");
+  return payload.threads;
 }

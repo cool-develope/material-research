@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from material_platform.domain.analysis import MaterialAnalysis
 from material_platform.domain.citation import Citation
 from material_platform.domain.enums import MaterialStatus
 from material_platform.domain.index_entry import IndexEntry
@@ -14,12 +16,17 @@ from material_platform.domain.material import Material
 from material_platform.domain.research_material import ContentLocation, format_location
 from material_platform.index import IndexService
 from material_platform.index.payload import MATERIAL_UNIT_ID
-from material_platform.index.service import SEARCH_WINDOW, ScoredEntry
-from material_platform.infrastructure.database.repositories import MaterialRepository
+from material_platform.index.service import ScoredEntry
+from material_platform.infrastructure.database.repositories import (
+    ArtifactRepository,
+    MaterialRepository,
+)
+from material_platform.infrastructure.object_store.protocol import ObjectStore
 
-_SNIPPET = 160
+_SNIPPET = 180
 _SOURCE_BOOST = 0.05
 _MAX_SIBLINGS = 4
+_MAX_KEYWORDS = 8
 _TYPE_ORDER = {
     "document": 0,
     "project": 1,
@@ -35,19 +42,53 @@ class MaterialHit:
     material_type: str
     root_path: str
     score: float
+    snippet: str = ""
+    keywords: tuple[str, ...] = ()
     siblings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MaterialUnitInfo:
+    unit_type: str
+    citation: str
+
+
+@dataclass(frozen=True)
+class MaterialDetail:
+    material_id: UUID
+    title: str
+    material_type: str
+    material_subtype: str | None
+    root_path: str
+    status: str
+    summary: str
+    purpose: str | None
+    keywords: tuple[str, ...]
+    topics: tuple[str, ...]
+    technologies: tuple[str, ...]
+    research_relevance: float | None
+    units: tuple[MaterialUnitInfo, ...]
 
 
 @dataclass(frozen=True)
 class MaterialPage:
     results: tuple[MaterialHit, ...]
     has_more: bool
+    page_count: int = 0
+    total: int = 0
 
 
 class DeepResearchService:
-    def __init__(self, session: Session, index: IndexService) -> None:
+    def __init__(
+        self,
+        session: Session,
+        index: IndexService,
+        store: ObjectStore | None = None,
+    ) -> None:
         self._index = index
         self._materials = MaterialRepository(session)
+        self._artifacts = ArtifactRepository(session)
+        self._store = store
 
     def search(
         self,
@@ -66,33 +107,76 @@ class DeepResearchService:
         with log.span(
             "search", offset=offset, limit=limit, material_type=material_type
         ):
-            if offset >= SEARCH_WINDOW:
-                page = MaterialPage(results=(), has_more=False)
-            else:
-                fetch = min(limit + 1, SEARCH_WINDOW - offset)
-                hits = self._index.search_materials(
-                    query,
-                    offset=offset,
-                    limit=fetch,
-                    material_type=material_type,
-                    tracer=log,
-                )
-                has_more = len(hits) > limit
-                hits = hits[:limit]
-                loaded = _load_materials(self._materials, hits)
-                siblings = _siblings_by_source(self._materials, loaded)
-                page = MaterialPage(
-                    results=tuple(_material_hit(hit, loaded, siblings) for hit in hits),
-                    has_more=has_more,
-                )
+            found = self._index.search_materials(
+                query,
+                offset=offset,
+                limit=limit,
+                material_type=material_type,
+                tracer=log,
+            )
+            has_more = offset + len(found.hits) < found.total
+            page_count = (
+                (found.total + limit - 1) // limit if found.total else 0
+            )
+            loaded = _load_materials(self._materials, found.hits)
+            analyses = self._analyses(
+                tuple(hit.entry.material_id for hit in found.hits)
+            )
+            page = MaterialPage(
+                results=tuple(
+                    _material_hit(hit, loaded, analyses) for hit in found.hits
+                ),
+                has_more=has_more,
+                page_count=page_count,
+                total=found.total,
+            )
             log.set_output(
                 {
                     "hits": len(page.results),
                     "has_more": page.has_more,
+                    "page_count": page.page_count,
+                    "total": page.total,
                     "top": page.results[0].title if page.results else None,
                 }
             )
             return page
+
+    def get_material(self, material_id: UUID) -> MaterialDetail | None:
+        material = self._materials.get(material_id)
+        if material is None:
+            return None
+        analysis = self._analysis_of(material_id)
+        research = self._json_of(material_id, "research")
+        title = material.name
+        summary = ""
+        purpose: str | None = None
+        keywords: tuple[str, ...] = ()
+        topics: tuple[str, ...] = ()
+        technologies: tuple[str, ...] = ()
+        relevance: float | None = None
+        if analysis is not None:
+            title = analysis.title or title
+            summary = analysis.summary
+            purpose = analysis.purpose
+            keywords = analysis.keywords
+            topics = analysis.topics
+            technologies = analysis.technologies
+            relevance = analysis.research_relevance
+        return MaterialDetail(
+            material_id=material.material_id,
+            title=title,
+            material_type=material.material_type.value,
+            material_subtype=material.material_subtype,
+            root_path=material.root_path,
+            status=material.status.value,
+            summary=summary,
+            purpose=purpose,
+            keywords=keywords,
+            topics=topics,
+            technologies=technologies,
+            research_relevance=relevance,
+            units=_unit_infos(research),
+        )
 
     def select(
         self,
@@ -116,10 +200,45 @@ class DeepResearchService:
                 {
                     "hits": len(hits),
                     "top": format_location(_location(hits[0].entry)) if hits else None,
+                    "selected": [
+                        {
+                            "citation": format_location(_location(item.entry))
+                            or item.entry.title,
+                            "title": item.entry.title,
+                            "material_id": str(item.entry.material_id),
+                            "score": round(item.score, 4),
+                        }
+                        for item in hits
+                    ],
                 }
             )
         siblings = _siblings_by_source(self._materials, loaded)
         return tuple(_citation(hit, loaded, siblings) for hit in hits)
+
+    def _analyses(
+        self, material_ids: tuple[UUID, ...]
+    ) -> dict[UUID, MaterialAnalysis]:
+        artifacts = self._artifacts.latest_for_ids(material_ids, "analysis")
+        found: dict[UUID, MaterialAnalysis] = {}
+        for material_id, artifact in artifacts.items():
+            payload = _read_json(self._store, artifact.storage_uri)
+            analysis = _analysis_from(payload)
+            if analysis is not None:
+                found[material_id] = analysis
+        return found
+
+    def _analysis_of(self, material_id: UUID) -> MaterialAnalysis | None:
+        artifact = self._artifacts.latest_of_type(material_id, "analysis")
+        if artifact is None:
+            return None
+        return _analysis_from(_read_json(self._store, artifact.storage_uri))
+
+    def _json_of(self, material_id: UUID, artifact_type: str) -> dict[str, object]:
+        artifact = self._artifacts.latest_of_type(material_id, artifact_type)
+        if artifact is None:
+            return {}
+        payload = _read_json(self._store, artifact.storage_uri)
+        return payload if payload is not None else {}
 
 
 def _load_materials(
@@ -172,16 +291,25 @@ def _location(entry: IndexEntry) -> ContentLocation:
 def _material_hit(
     hit: ScoredEntry,
     loaded: dict[UUID, Material],
-    siblings: dict[UUID, list[Material]],
+    analyses: dict[UUID, MaterialAnalysis],
 ) -> MaterialHit:
     material = loaded.get(hit.entry.material_id)
+    analysis = analyses.get(hit.entry.material_id)
+    snippet = ""
+    keywords: tuple[str, ...] = ()
+    if analysis is not None:
+        snippet = _snippet(analysis.summary)
+        keywords = analysis.keywords[:_MAX_KEYWORDS]
+    elif hit.entry.content:
+        snippet = _snippet(hit.entry.content)
     return MaterialHit(
         material_id=hit.entry.material_id,
         title=hit.entry.title,
         material_type=(material.material_type.value if material is not None else ""),
         root_path=material.root_path if material is not None else "",
         score=hit.score,
-        siblings=_sibling_names(siblings, material),
+        snippet=snippet,
+        keywords=keywords,
     )
 
 
@@ -247,6 +375,72 @@ def _snippet(content: str) -> str:
     if len(text) <= _SNIPPET:
         return text
     return text[: _SNIPPET - 1].rstrip() + "…"
+
+
+def _read_json(store: ObjectStore | None, uri: str) -> dict[str, object] | None:
+    if store is None:
+        return None
+    try:
+        handle = store.open(uri)
+    except Exception:
+        return None
+    try:
+        raw = handle.read()
+    except Exception:
+        return None
+    finally:
+        handle.close()
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _analysis_from(payload: dict[str, object] | None) -> MaterialAnalysis | None:
+    if payload is None:
+        return None
+    try:
+        return MaterialAnalysis.model_validate(payload)
+    except Exception:
+        return None
+
+
+def _unit_infos(research: dict[str, object]) -> tuple[MaterialUnitInfo, ...]:
+    raw = research.get("content_units")
+    if not isinstance(raw, list):
+        return ()
+    units: list[MaterialUnitInfo] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        unit_id = item.get("unit_id")
+        if unit_id == MATERIAL_UNIT_ID:
+            continue
+        loc = item.get("location")
+        location = ContentLocation()
+        if isinstance(loc, dict):
+            path = loc.get("path")
+            page = loc.get("page")
+            line_start = loc.get("line_start")
+            line_end = loc.get("line_end")
+            section = loc.get("section")
+            location = ContentLocation(
+                path=path if isinstance(path, str) else None,
+                page=page if isinstance(page, int) else None,
+                line_start=line_start if isinstance(line_start, int) else None,
+                line_end=line_end if isinstance(line_end, int) else None,
+                section=section if isinstance(section, str) else None,
+            )
+        citation = format_location(location)
+        unit_type = item.get("type")
+        units.append(
+            MaterialUnitInfo(
+                unit_type=unit_type if isinstance(unit_type, str) else "",
+                citation=citation,
+            )
+        )
+    return tuple(units)
 
 
 class _NoopLog:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from material_platform.agent.state import AgentState
@@ -16,27 +17,47 @@ _REFERENCE = (
     "that finding",
     "remind",
     "as before",
+    "what else",
+    "tell me more",
+    "go deeper",
+    "the same",
+    "that paper",
+    "this paper",
+    "the paper",
+)
+
+_PRONOUN = re.compile(
+    r"\b(it|this|that|those|them|they|its|their|same)\b", re.IGNORECASE
 )
 
 
 def looks_like_reference(query: str) -> bool:
     lowered = query.lower()
-    return any(token in lowered for token in _REFERENCE)
+    if any(token in lowered for token in _REFERENCE):
+        return True
+    return bool(_PRONOUN.search(query))
 
 
 def remember(store: Any, thread_id: str, state: AgentState) -> None:
     if store is None or not thread_id:
         return
     namespace = (thread_id,)
+    objective = ""
     if state.request is not None:
+        objective = state.request.objective
+    elif state.plan.objective:
+        objective = state.plan.objective
+    if objective:
         store.put(
             namespace,
             "request",
             {
                 "kind": "request",
-                "text": state.request.objective,
-                "emphasis": state.request.emphasis,
-                "constraints": list(state.request.constraints),
+                "text": objective,
+                "emphasis": state.request.emphasis if state.request is not None else "",
+                "constraints": (
+                    list(state.request.constraints) if state.request is not None else []
+                ),
             },
         )
     if state.summary is not None and state.summary.text.strip():

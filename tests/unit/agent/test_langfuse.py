@@ -48,6 +48,7 @@ class _Obs:
     def __init__(self, client: "_V4", name: str, as_type: str) -> None:
         self.name = name
         self.as_type = as_type
+        self.input = None
         self.output = None
         self._client = client
 
@@ -60,7 +61,10 @@ class _Obs:
         self._client.stack.pop()
 
     def update(self, **kwargs: object) -> None:
-        self.output = kwargs.get("output")
+        if "output" in kwargs:
+            self.output = kwargs["output"]
+        if "input" in kwargs:
+            self.input = kwargs["input"]
 
     def create_event(self, *, name: str, metadata=None, **kwargs):
         return self._client.create_event(name=name, metadata=metadata, **kwargs)
@@ -77,7 +81,9 @@ class _V4:
     def start_as_current_observation(self, *, as_type: str, name: str, **kwargs):
         if as_type == "event":
             raise AssertionError("v4 rejects as_type=event")
-        return _Obs(self, name, as_type)
+        obs = _Obs(self, name, as_type)
+        obs.input = kwargs.get("input")
+        return obs
 
     def create_event(self, *, name: str, metadata=None, **kwargs) -> _Obs:
         self.events.append(name)
@@ -148,7 +154,12 @@ def test_langfuse_v4_uses_observations() -> None:
     assert ("extract", "generation") in kinds
     assert "extract" in client.events
     gen = next(item for item in client.opened if item.as_type == "generation")
-    assert "…" in str(gen.output)
+    assert gen.input == "prompt"
+    assert gen.output == "y" * 500
+    tracer.generation("extract", "z" * 40_000, "w" * 40_000)
+    huge = [item for item in client.opened if item.as_type == "generation"][-1]
+    assert str(huge.input).endswith("…")
+    assert len(str(huge.input)) == 32_000
     extract = next(
         item
         for item in client.opened

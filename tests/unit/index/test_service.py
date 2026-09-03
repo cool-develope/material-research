@@ -185,7 +185,7 @@ def test_search_materials_returns_material_points() -> None:
     )
     index.replace(target)
     index.replace(distractor)
-    hits = index.search_materials("aerospace_alloys_topic")
+    hits = index.search_materials("aerospace_alloys_topic").hits
     assert hits
     assert all(hit.entry.unit_id == MATERIAL_UNIT_ID for hit in hits)
     assert hits[0].entry.title == "paper.pdf"
@@ -209,13 +209,59 @@ def test_search_materials_paginates() -> None:
             ),
         )
         index.replace(research)
-    first = index.search_materials("shared topic", offset=0, limit=2)
-    second = index.search_materials("shared topic", offset=2, limit=2)
+    first = index.search_materials("shared topic", offset=0, limit=2).hits
+    second = index.search_materials("shared topic", offset=2, limit=2).hits
     assert len(first) == 2
     assert len(second) == 2
     first_ids = {hit.entry.material_id for hit in first}
     second_ids = {hit.entry.material_id for hit in second}
     assert first_ids.isdisjoint(second_ids)
+
+
+def test_search_materials_reuses_query_embedding() -> None:
+    from qdrant_client import QdrantClient
+
+    from material_platform.index.service import IndexService
+    from material_platform.infrastructure.embedding.fake import FakeEmbedder
+    from material_platform.infrastructure.embedding.protocol import EmbeddedText
+    from material_platform.infrastructure.qdrant.store import QdrantIndexStore
+
+    class CountingEmbedder(FakeEmbedder):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def embed(self, text: str) -> EmbeddedText:
+            self.calls += 1
+            return super().embed(text)
+
+    embedder = CountingEmbedder()
+    index = IndexService(
+        QdrantIndexStore(QdrantClient(":memory:"), "research"), embedder
+    )
+    for index_no in range(4):
+        research = ResearchMaterial(
+            material_id=uuid4(),
+            material_type=MaterialType.DOCUMENT,
+            material_subtype="pdf",
+            title=f"paper{index_no}.pdf",
+            summary="notes",
+            content_units=(
+                _page(f"paper{index_no}.pdf", 1, f"shared topic {index_no}"),
+            ),
+            provenance=MaterialProvenance(
+                source_id=uuid4(), root_path=f"paper{index_no}.pdf"
+            ),
+        )
+        index.replace(research)
+    before = embedder.calls
+    first = index.search_materials("shared topic", offset=0, limit=2)
+    second = index.search_materials("shared topic", offset=2, limit=2)
+    assert len(first.hits) == 2
+    assert len(second.hits) == 2
+    assert first.total == second.total == 4
+    assert embedder.calls == before + 1
+    index.search_detail("shared topic")
+    assert embedder.calls == before + 1
 
 
 def test_search_materials_filters_by_material_type() -> None:
@@ -241,11 +287,11 @@ def test_search_materials_filters_by_material_type() -> None:
     )
     index.replace(paper)
     index.replace(backend)
-    project_hits = index.search_materials("handle_request", material_type="project")
+    project_hits = index.search_materials("handle_request", material_type="project").hits
     assert project_hits
     assert all(hit.entry.unit_id == MATERIAL_UNIT_ID for hit in project_hits)
     assert project_hits[0].entry.title == "backend"
-    document_hits = index.search_materials("handle_request", material_type="document")
+    document_hits = index.search_materials("handle_request", material_type="document").hits
     assert document_hits
     assert document_hits[0].entry.title == "paper.pdf"
 

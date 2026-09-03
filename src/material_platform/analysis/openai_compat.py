@@ -48,10 +48,14 @@ def _chat_body(model: str, prompt: str) -> dict[str, object]:
         "model": model,
         "temperature": 0,
         "reasoning_effort": "none",
+        "response_format": {"type": "json_object"},
         "messages": [
             {
                 "role": "system",
-                "content": "Reply with a JSON object only. No markdown.",
+                "content": (
+                    "You output a single JSON object and nothing else. "
+                    "Do not continue the conversation. No markdown."
+                ),
             },
             {"role": "user", "content": prompt},
         ],
@@ -71,22 +75,61 @@ def _message_content(payload: object) -> str:
     if not isinstance(message, dict):
         raise RuntimeError("LLM message is missing")
     content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
+    text = _content_text(content)
+    if not text:
         raise RuntimeError("LLM content is empty")
-    return content
+    return text
+
+
+def _content_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+            elif isinstance(item, dict):
+                piece = item.get("text") or item.get("content")
+                if isinstance(piece, str) and piece.strip():
+                    parts.append(piece.strip())
+        return "\n".join(parts).strip()
+    return ""
 
 
 def _parse_json(content: str) -> dict[str, object]:
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
+    text = _strip_fence(content.strip())
+    parsed = _load_object(text)
+    if parsed is None:
+        parsed = _extract_object(text)
+    if parsed is None:
+        raise RuntimeError("LLM content is not JSON")
+    return parsed
+
+
+def _strip_fence(text: str) -> str:
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _load_object(text: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("LLM content is not JSON") from exc
-    if not isinstance(parsed, dict):
-        raise RuntimeError("LLM JSON is not an object")
-    return parsed
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _extract_object(text: str) -> dict[str, object] | None:
+    start = text.find("{")
+    if start < 0:
+        return None
+    try:
+        parsed, _end = json.JSONDecoder().raw_decode(text[start:])
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None

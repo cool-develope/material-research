@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Literal
 from uuid import UUID
 
+from pydantic import Field
+
 from material_platform.agent.budgets import STANDARD
 from material_platform.domain.base import Contract
 from material_platform.domain.citation import Citation
 
 MAX_SELECT_CALLS = STANDARD.select_calls
-RAW_QUESTION_ID = "Q0"
+RAW_QUESTION_ID = "Q1"
 
 QuestionStatus = Literal["pending", "researching", "covered", "gap", "unresolved"]
 Priority = Literal["required", "optional"]
@@ -22,9 +24,17 @@ class ResearchQuestion(Contract):
     comparative: bool = False
 
 
+class ResearchScope(Contract):
+    materials: tuple[str, ...] = ()
+    exclude_topics: tuple[str, ...] = ()
+
+
 class ResearchPlan(Contract):
     objective: str
     questions: tuple[ResearchQuestion, ...]
+    intent: str = "research"
+    needs_retrieval: bool = True
+    scope: ResearchScope = Field(default_factory=ResearchScope)
 
 
 class EvidenceItem(Contract):
@@ -73,7 +83,11 @@ class ResearchRequest(Contract):
 
 
 class ConversationSummary(Contract):
-    text: str
+    main_goal: str = ""
+    current_focus: str = ""
+    important_decisions: tuple[str, ...] = ()
+    current_scope: tuple[str, ...] = ()
+    text: str = ""
 
 
 class ReportSection(Contract):

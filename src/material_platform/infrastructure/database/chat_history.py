@@ -30,6 +30,15 @@ class StoredChatThread:
     messages: tuple[StoredChatMessage, ...]
 
 
+@dataclass(frozen=True)
+class StoredChatThreadSummary:
+    thread_id: str
+    title: str
+    mode: str | None
+    updated_at: datetime
+    messages: int
+
+
 class ChatHistoryRepository(BaseRepository):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
@@ -110,3 +119,37 @@ class ChatHistoryRepository(BaseRepository):
                 for row in rows
             ),
         )
+
+    def list_threads(self, *, limit: int = 50) -> tuple[StoredChatThreadSummary, ...]:
+        threads = self._session.scalars(
+            select(ChatThreadRow)
+            .order_by(ChatThreadRow.updated_at.desc())
+            .limit(limit)
+        ).all()
+        summaries: list[StoredChatThreadSummary] = []
+        for thread in threads:
+            first = self._session.scalar(
+                select(ChatMessageRow)
+                .where(
+                    ChatMessageRow.thread_id == thread.thread_id,
+                    ChatMessageRow.role == "user",
+                )
+                .order_by(ChatMessageRow.ordinal)
+                .limit(1)
+            )
+            count = self._session.scalar(
+                select(func.count())
+                .select_from(ChatMessageRow)
+                .where(ChatMessageRow.thread_id == thread.thread_id)
+            )
+            title = first.content.strip() if first is not None else "New chat"
+            summaries.append(
+                StoredChatThreadSummary(
+                    thread_id=thread.thread_id,
+                    title=title,
+                    mode=thread.mode,
+                    updated_at=thread.updated_at,
+                    messages=int(count or 0),
+                )
+            )
+        return tuple(summaries)

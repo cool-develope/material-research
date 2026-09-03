@@ -1,7 +1,8 @@
 # Local stack. Langfuse reuses postgres (database `langfuse`) and minio
 # (bucket `langfuse`). LangGraph reuses postgres (database `langgraph`)
 # for checkpoints and Qdrant (collection `langgraph`) for the agent store.
-# ClickHouse and Redis are Langfuse-only (traces / queue).
+# ClickHouse is Langfuse-only (traces). Redis is Langfuse queue plus
+# query-embedding cache for mp serve.
 # UI: http://localhost:3100  (Dagster keeps 3000). ClickHouse native port is
 # not published — it would collide with MinIO on 9000. Images are Langfuse v4
 # (matches Python SDK 4.x; same Postgres/ClickHouse/Redis/MinIO as v3).
@@ -108,6 +109,8 @@ services:
   redis:
     image: redis:7
     command: ["redis-server", "--requirepass", "langfuse", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:

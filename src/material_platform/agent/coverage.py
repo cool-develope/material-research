@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from material_platform.agent.context import for_follow_up
+from material_platform.agent.context import for_gap
 from material_platform.agent.llm import named_llm
-from material_platform.agent.models import (
-    RAW_QUESTION_ID,
-    QuestionState,
-)
+from material_platform.agent.models import QuestionState
 from material_platform.agent.state import AgentState
 from material_platform.agent.trace import Tracer
 from material_platform.analysis.protocol import LlmClient
@@ -42,34 +39,40 @@ def cover_state(state: AgentState, *, tracer: Tracer) -> AgentState:
     return state
 
 
-def follow_up_state(
+def gap_check(
     state: AgentState, *, tracer: Tracer, client: LlmClient | None = None
 ) -> AgentState:
-    gap = _next_gap(state)
-    if gap is None:
+    cover_state(state, tracer=tracer)
+    if state.queue or remaining_calls(state) <= 0:
         return state
-    question = next(item for item in state.plan.questions if item.id == gap)
-    extra = _follow_up_query(question.question, state)
-    drafted = _llm_follow_up(
-        question.question, extra, state, named_llm(client, tracer, "follow_up")
-    )
-    if drafted:
-        extra = drafted
-    seen = {attempt.query for attempt in state.history}
-    if extra in seen or extra == question.question:
-        state.questions[gap] = state.questions[gap].model_copy(
-            update={"status": "unresolved"}
-        )
-        return state
-    with tracer.span("follow_up", question_id=gap, query=extra):
-        state.queue.append((gap, extra, True))
-        tracer.event("follow_up", question_id=gap, query=extra)
-        tracer.set_output({"question_id": gap, "query": extra})
+    with tracer.span("gap", select_calls=state.select_calls):
+        extras = _llm_gap(state, named_llm(client, tracer, "gap"))
+        seen = {attempt.query for attempt in state.history}
+        added: list[str] = []
+        for question_id, query in extras:
+            if remaining_calls(state) <= 0:
+                break
+            if not query or query in seen:
+                continue
+            state.queue.append((question_id, query, True))
+            seen.add(query)
+            added.append(query)
+            tracer.event("gap", question_id=question_id, query=query)
+        tracer.set_output({"answered": not added, "missing": added})
     return state
 
 
 def has_work(state: AgentState) -> bool:
     return bool(state.queue) and state.select_calls < state.budgets.select_calls
+
+
+def remaining_calls(state: AgentState) -> int:
+    used = state.select_calls + len(state.queue)
+    return max(0, state.budgets.select_calls - used)
+
+
+def needs_retrieve(state: AgentState) -> bool:
+    return state.plan.needs_retrieval and has_work(state)
 
 
 def _status(
@@ -90,48 +93,46 @@ def _status(
     return "unresolved"
 
 
-def _next_gap(state: AgentState) -> str | None:
-    for question in state.plan.questions:
-        row = state.questions[question.id]
-        if row.status == "gap" and row.iterations < 2:
-            if question.id == RAW_QUESTION_ID and row.iterations >= 1:
-                continue
-            return question.id
-    return None
-
-
-def _follow_up_query(question: str, state: AgentState) -> str:
-    tokens = [part for part in question.split() if len(part) > 3][:8]
-    seen = " ".join(
-        sorted(
-            {
-                item.citation.location.path or ""
-                for item in state.evidence
-                if item.citation.location.path
-            }
-        )[:4]
-    )
-    return " ".join(tokens + (["evidence", seen] if seen else ["evidence"]))
-
-
-def _llm_follow_up(
-    question: str,
-    draft: str,
-    state: AgentState,
-    client: LlmClient | None,
-) -> str | None:
+def _llm_gap(
+    state: AgentState, client: LlmClient | None
+) -> list[tuple[str, str]]:
     if client is None:
-        return None
+        return []
     prompt = (
-        "One short follow-up search query for this unanswered question. "
-        'JSON {"query": str}. Do not repeat the original question.\n\n'
-        f"{for_follow_up(question, draft, state)}"
+        "Check whether the current findings answer the latest user request. "
+        "If important information is missing and another search would help, "
+        "list short search queries. Do not continue the thread.\n\n"
+        f"{for_gap(state)}\n\n"
+        'Reply with one JSON object only: {"answered": true, "missing": []}'
     )
     try:
         payload = client.complete_json(prompt)
     except Exception:
-        return None
-    text = payload.get("query")
-    if isinstance(text, str) and text.strip() and text.strip() != question:
-        return text.strip()
-    return None
+        return []
+    if payload.get("answered") is True:
+        return []
+    raw = payload.get("missing")
+    if not isinstance(raw, list):
+        return []
+    fallback = next(
+        (
+            question.id
+            for question in state.plan.questions
+            if state.questions.get(question.id)
+            and state.questions[question.id].status in {"gap", "unresolved"}
+        ),
+        state.plan.questions[0].id if state.plan.questions else "Q1",
+    )
+    extras: list[tuple[str, str]] = []
+    for item in raw:
+        if isinstance(item, str) and item.strip():
+            extras.append((fallback, item.strip()))
+        elif isinstance(item, dict):
+            query = item.get("query")
+            if not isinstance(query, str) or not query.strip():
+                continue
+            qid = item.get("question_id")
+            if not isinstance(qid, str) or qid not in state.questions:
+                qid = fallback
+            extras.append((qid, query.strip()))
+    return extras

@@ -7,24 +7,40 @@ from material_platform.domain.citation import Citation
 MAP_CHARS = 8000
 
 
-def for_plan(state: AgentState) -> str:
-    parts: list[str] = []
-    if state.summary is not None and state.summary.text.strip():
-        parts.append(f"Conversation summary: {state.summary.text.strip()}")
+def chat_context(state: AgentState) -> str:
+    parts: list[str] = ["<thread>"]
+    if state.summary is not None:
+        summary = state.summary
+        if summary.main_goal.strip():
+            parts.append(f"Main goal: {summary.main_goal.strip()}")
+        if summary.current_focus.strip():
+            parts.append(f"Current focus: {summary.current_focus.strip()}")
+        if summary.important_decisions:
+            parts.append(
+                "Important decisions: " + "; ".join(summary.important_decisions)
+            )
+        if summary.current_scope:
+            parts.append("Current scope: " + "; ".join(summary.current_scope))
+        if (
+            not summary.main_goal.strip()
+            and not summary.current_focus.strip()
+            and summary.text.strip()
+        ):
+            parts.append(f"Conversation summary: {summary.text.strip()}")
     if state.conversation:
         parts.append("Recent turns:")
         for turn in state.conversation:
-            parts.append(f"User: {turn.query}")
-            parts.append(f"Assistant: {turn.answer}")
-    if state.request is not None:
-        parts.append(f"Research request: {state.request.objective}")
-        if state.request.emphasis:
-            parts.append(f"Emphasis: {state.request.emphasis}")
-        if state.request.constraints:
-            parts.append("Constraints: " + "; ".join(state.request.constraints))
-    if state.recalled.strip():
-        parts.append(state.recalled.strip())
+            parts.append(f"Past user: {turn.query}")
+            parts.append(f"Past assistant: {turn.answer}")
+    if state.prior_research.strip():
+        parts.append(f"Previous research: {state.prior_research.strip()}")
+    parts.append(f"Latest user message: {state.query}")
+    parts.append("</thread>")
     return "\n".join(parts)
+
+
+def for_plan(state: AgentState) -> str:
+    return chat_context(state)
 
 
 def for_extract(question: str, hits: list[Citation]) -> str:
@@ -34,27 +50,41 @@ def for_extract(question: str, hits: list[Citation]) -> str:
     return "\n".join(lines)
 
 
-def for_write_section(objective: str, heading: str, body: str) -> str:
+def for_write_section(
+    objective: str, heading: str, body: str, *, context: str = ""
+) -> str:
+    prior = f"{context}\n\n" if context.strip() else ""
     return (
         "Rewrite this section in 1-3 sentences. Keep every citation string "
-        'unchanged. JSON {"body": str}.\n\n'
-        f"Objective: {objective}\nHeading: {heading}\n{body}"
+        "unchanged. Use the thread only as context; do not continue it.\n\n"
+        f"{prior}"
+        f"Objective: {objective}\nHeading: {heading}\n{body}\n\n"
+        'Reply with one JSON object only: {"body": str}'
     )
 
 
-def for_summary(objective: str, sections: list[ReportSection]) -> str:
+def for_summary(
+    objective: str, sections: list[ReportSection], *, context: str = ""
+) -> str:
+    prior = f"{context}\n\n" if context.strip() else ""
     return (
         "Write a 2-sentence executive summary last, after these sections. "
-        'JSON {"summary": str}. Do not add citations that are not listed.\n\n'
+        "Use the thread only as context. Do not add citations that are not listed.\n\n"
+        f"{prior}"
         f"Objective: {objective}\n\n"
         + "\n\n".join(f"## {item.heading}\n{item.body}" for item in sections)
+        + '\n\nReply with one JSON object only: {"summary": str}'
     )
 
 
-def for_follow_up(question: str, draft: str, state: AgentState) -> str:
-    searches = [item.query for item in state.history][-6:]
-    prior = f"\nPrior searches: {'; '.join(searches)}" if searches else ""
-    return f"Question: {question}\nDraft: {draft}{prior}"
+def for_gap(state: AgentState) -> str:
+    lines = [chat_context(state), "Questions:"]
+    for question in state.plan.questions:
+        row = state.questions.get(question.id)
+        status = row.status if row is not None else "pending"
+        last = row.last_query if row is not None else ""
+        lines.append(f"- {question.id} [{status}] {question.question} last={last}")
+    return "\n".join(lines)
 
 
 def map_batches(

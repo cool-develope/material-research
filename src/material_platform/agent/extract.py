@@ -93,11 +93,11 @@ def _llm_items(
     if client is None:
         return None
     prompt = (
-        "Extract evidence JSON "
-        '{"items": [{"index": int, "finding": str, '
-        '"stance": "supports|contradicts|neutral"}]}. '
-        "index refers to the numbered citations. Do not invent locators.\n\n"
+        "Extract grounded findings from the numbered citations. "
+        "Do not invent locators. Do not continue any conversation.\n\n"
         + for_extract(question, hits)
+        + '\n\nReply with one JSON object only: {"items": [{"index": 1, '
+        '"finding": str, "stance": "supports"}]}'
     )
     try:
         payload = client.complete_json(prompt)

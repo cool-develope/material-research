@@ -45,7 +45,8 @@ class SearchHit(BaseModel):
     material_type: str
     root_path: str
     score: float
-    siblings: list[str] = Field(default_factory=list)
+    snippet: str = ""
+    keywords: list[str] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
@@ -53,8 +54,31 @@ class SearchResponse(BaseModel):
     page: int
     page_size: int
     has_more: bool
+    page_count: int = 0
+    total: int = 0
     results: list[SearchHit]
     trace_url: str | None = None
+
+
+class MaterialUnitHit(BaseModel):
+    unit_type: str
+    citation: str
+
+
+class MaterialDetailResponse(BaseModel):
+    material_id: UUID
+    title: str
+    material_type: str
+    material_subtype: str | None = None
+    root_path: str
+    status: str
+    summary: str
+    purpose: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    technologies: list[str] = Field(default_factory=list)
+    research_relevance: float | None = None
+    units: list[MaterialUnitHit] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):
@@ -101,6 +125,18 @@ class ChatHistoryResponse(BaseModel):
     thread_id: str
     mode: str | None = None
     messages: list[ChatHistoryMessage]
+
+
+class ChatThreadSummary(BaseModel):
+    thread_id: str
+    title: str
+    mode: str | None = None
+    updated_at: str
+    messages: int
+
+
+class ChatThreadListResponse(BaseModel):
+    threads: list[ChatThreadSummary]
 
 
 class HealthResponse(BaseModel):

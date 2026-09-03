@@ -4,13 +4,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from material_platform.agent.trace import Tracer, clip, meta
+from material_platform.agent.trace import Tracer, clip_llm, meta
 
 
 class LangfuseTracer(Tracer):
     """Langfuse adapter for SDK v2 (`trace`), v3 (`start_as_current_span`),
     and v4 (`start_as_current_observation`). Nested node spans; LLM calls
-    are generations. Prompts are clipped; unit bodies are never sent.
+    are generations with full prompts and replies. Retrieve outputs are
+    locators and scores, not unit bodies.
     """
 
     def __init__(
@@ -87,11 +88,17 @@ class LangfuseTracer(Tracer):
         if callable(update):
             update(output=value)
 
+    def set_input(self, value: object) -> None:
+        current = self._stack[-1] if self._stack else self._trace
+        update = getattr(current, "update", None)
+        if callable(update):
+            update(input=value)
+
     def generation(
         self, name: str, prompt: str, output: str, **attrs: object
     ) -> None:
         payload = meta(attrs)
-        clipped_in, clipped_out = clip(prompt), clip(output)
+        clipped_in, clipped_out = clip_llm(prompt), clip_llm(output)
         if self._kind == "observation":
             ctx = self._client.start_as_current_observation(
                 as_type="generation",

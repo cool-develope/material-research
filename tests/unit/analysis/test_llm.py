@@ -72,6 +72,14 @@ def test_openai_compat_parses_fenced_json() -> None:
     assert parsed["summary"] == "ok"
 
 
+def test_openai_compat_extracts_json_from_prose() -> None:
+    parsed = _parse_json(
+        'Sure, here is the plan.\n{"intent": "deepen", "objective": "auth"}\nDone.'
+    )
+    assert parsed["intent"] == "deepen"
+    assert parsed["objective"] == "auth"
+
+
 def test_openai_compat_joins_v1_chat_completions() -> None:
     client = OpenAICompatClient("http://127.0.0.1:11434/v1/", "ollama", "llama3.1")
     assert client._url == "http://127.0.0.1:11434/v1/chat/completions"
@@ -80,6 +88,7 @@ def test_openai_compat_joins_v1_chat_completions() -> None:
 def test_openai_compat_disables_thinking() -> None:
     body = _chat_body("qwen3.5:0.8b", "hello")
     assert body["reasoning_effort"] == "none"
+    assert body["response_format"] == {"type": "json_object"}
 
 
 def test_llm_artifact_prompt_uses_metadata_only(tmp_path: Path) -> None:

@@ -41,8 +41,16 @@ def test_search_returns_materials(tmp_path: Path) -> None:
     assert results[0]["root_path"]
     assert results[0]["material_type"]
     assert results[0]["material_id"]
+    assert results[0]["snippet"]
+    assert "siblings" not in results[0]
     assert "citation" not in results[0]
-    assert body["trace_url"] is None
+    detail = client.get(f"/materials/{results[0]['material_id']}")
+    assert detail.status_code == 200
+    card = detail.json()
+    assert card["summary"]
+    assert card["material_id"] == results[0]["material_id"]
+    missing = client.get("/materials/00000000-0000-0000-0000-000000000000")
+    assert missing.status_code == 404
 
 
 def test_search_filters_material_type(tmp_path: Path) -> None:
@@ -75,6 +83,8 @@ def test_search_paginates(tmp_path: Path) -> None:
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["has_more"] is True
+    assert first.json()["page_count"] >= 2
+    assert first.json()["total"] >= 2
     assert first.json()["results"]
     assert second.json()["results"]
     assert (
@@ -127,6 +137,7 @@ def test_chat_continues_thread(tmp_path: Path) -> None:
     assert second.status_code == 200
     assert second.json()["thread_id"] == thread_id
     assert second.json()["text"]
+    assert "handle_request" in second.json()["objective"]
 
 
 def test_chat_history_returns_full_transcript(tmp_path: Path) -> None:
@@ -157,4 +168,9 @@ def test_chat_history_returns_full_transcript(tmp_path: Path) -> None:
     assert messages[0]["content"] == "handle_request"
     assert messages[2]["content"] == "where is it defined"
     assert first.json()["text"] in messages[1]["content"]
+    listed = client.get("/chats")
+    assert listed.status_code == 200
+    threads = listed.json()["threads"]
+    assert any(item["thread_id"] == thread_id for item in threads)
+    assert any(item["title"] == "handle_request" for item in threads)
     assert missing.status_code == 404

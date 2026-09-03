@@ -1,0 +1,283 @@
+.g-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+  border-bottom: 1px solid var(--line);
+  margin-top: 0.85rem;
+}
+
+.g-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.7rem 0.85rem 0.55rem;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-size: 0.92rem;
+  text-decoration: none;
+  text-transform: capitalize;
+}
+
+.g-tab.research {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-transform: none;
+}
+
+.g-tab.on {
+  color: var(--filter);
+  border-bottom-color: var(--filter);
+  font-weight: 600;
+}
+
+.g-tab:hover {
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sparkle {
+  width: 14px;
+  height: 14px;
+}
+
+.logo-wrap {
+  margin: 0 0 1.6rem;
+  text-align: center;
+}
+
+.logo {
+  font-size: 3.15rem;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.logo-sm {
+  font-size: 1.18rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.logo-link {
+  text-decoration: none;
+}
+
+.logo-glyph-link {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  text-decoration: none;
+  flex: none;
+}
+
+.logo-glyph-link:hover {
+  text-decoration: none;
+  background: var(--side-hover);
+}
+
+.logo-glyph {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.logo-glyph .g-b {
+  fill: var(--blue);
+}
+
+.corner-actions {
+  position: fixed;
+  top: 0.55rem;
+  right: 1rem;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.theme-icon {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.theme-icon:hover {
+  background: var(--side-hover);
+  color: var(--ink);
+}
+
+.theme-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.g-account {
+  position: relative;
+}
+
+.g-signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 40px;
+  padding: 0 1.15rem 0 0.7rem;
+  border: 0;
+  border-radius: 20px;
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.g-signin:hover {
+  background: #1765cc;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+  text-decoration: none;
+}
+
+.g-signin svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.g-avatar-btn {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.g-avatar-btn:hover {
+  background: var(--side-hover);
+}
+
+.g-account-pop {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: 22rem;
+  padding: 1.15rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--card);
+  box-shadow: var(--shadow-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.g-account-pop .avatar.lg {
+  width: 72px;
+  height: 72px;
+  font-size: 1.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.g-account-name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.g-account-plan {
+  margin: 0 0 0.7rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.g-account-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 0.55rem;
+}
+
+.g-account-form input {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: inherit;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.g-account-form button[type="submit"],
+.g-account-out {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.g-account-form button[type="submit"] {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: #fff;
+}
+
+.g-account-form button[type="submit"]:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.g-account-out:hover {
+  background: var(--chip);
+}
+
+.g-account-form button[type="submit"]:hover:not(:disabled) {
+  background: #1765cc;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--avatar);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 650;
+  flex: none;
+}
+
+@media (max-width: 900px) {
+  .logo {
+    font-size: 2.2rem;
+  }
+}

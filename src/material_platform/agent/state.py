@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from material_platform.agent.budgets import STANDARD, AgentBudgets
-from material_platform.agent.compact import clip_answer, fold_turns, make_request
+from material_platform.agent.compact import (
+    clip_answer,
+    clip_research,
+    fold_turns,
+)
 from material_platform.agent.models import (
     ChatTurn,
     ConversationSummary,
@@ -37,11 +41,14 @@ class AgentState:
     conversation: list[ChatTurn] = field(default_factory=list)
     request: ResearchRequest | None = None
     summary: ConversationSummary | None = None
-    recalled: str = ""
+    prior_research: str = ""
+    prior_findings: list[Finding] = field(default_factory=list)
+    prior_evidence: list[EvidenceItem] = field(default_factory=list)
+    prior_plan: ResearchPlan | None = None
 
 
 def empty_plan(query: str) -> ResearchPlan:
-    question = ResearchQuestion(id="Q0", question=query)
+    question = ResearchQuestion(id="Q1", question=query)
     return ResearchPlan(objective=query, questions=(question,))
 
 
@@ -69,9 +76,41 @@ def continue_state(
         answer = previous.report.summary.strip() or previous.report.text
     turns.append(ChatTurn(query=previous.query, answer=clip_answer(answer)))
     recent, summary = fold_turns(previous.summary, turns, client=client)
-    request = make_request(query, summary, recent, previous.request, client=client)
     state = bootstrap(query, budgets)
     state.conversation = recent
     state.summary = summary
-    state.request = request
+    state.prior_plan = previous.plan
+    state.prior_findings = list(previous.findings)
+    state.prior_evidence = list(previous.evidence)
+    state.prior_research = _prior_research(previous)
+    state.queue = []
     return state
+
+
+def state_from_turns(
+    turns: list[ChatTurn], budgets: AgentBudgets = STANDARD
+) -> AgentState | None:
+    if not turns:
+        return None
+    last = turns[-1]
+    previous = bootstrap(last.query, budgets)
+    previous.conversation = list(turns[:-1])
+    previous.request = ResearchRequest(objective=last.query)
+    previous.report = ResearchReport(
+        objective=last.query,
+        sections=(),
+        summary=last.answer,
+        citations=(),
+        text=last.answer,
+    )
+    previous.prior_research = clip_research(last.answer)
+    return previous
+
+
+def _prior_research(previous: AgentState) -> str:
+    if previous.report is not None:
+        text = previous.report.summary.strip() or previous.report.objective
+        return clip_research(text)
+    if previous.findings:
+        return clip_research("; ".join(item.claim for item in previous.findings[:4]))
+    return previous.prior_research

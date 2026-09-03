@@ -4,7 +4,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { Layout } from "./components/Layout";
 import { ChatPage } from "./pages/ChatPage";
+import { MaterialPage } from "./pages/MaterialPage";
 import { SearchPage } from "./pages/SearchPage";
+import { ProfileProvider, ThemeProvider } from "./prefs";
 import "./index.css";
 
 const root = document.getElementById("root");
@@ -14,15 +16,20 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<SearchPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:threadId" element={<ChatPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ThemeProvider>
+      <ProfileProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<SearchPage />} />
+            <Route path="/materials/:materialId" element={<MaterialPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:threadId" element={<ChatPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ProfileProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

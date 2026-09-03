@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.postgres:
         data_dir = (args.data_dir or settings.workspace_root).resolve()
         settings = sqlite_settings(settings, data_dir)
+    print(
+        f"serve {'postgres' if args.postgres else 'sqlite'} "
+        f"collection={settings.qdrant_collection} "
+        f"embedder={settings.embedder} reranker={settings.reranker}",
+        flush=True,
+    )
     try:
         import uvicorn
     except ImportError:

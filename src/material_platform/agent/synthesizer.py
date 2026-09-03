@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from material_platform.agent.context import for_summary, for_write_section
+from material_platform.agent.context import chat_context, for_summary, for_write_section
 from material_platform.agent.llm import named_llm
 from material_platform.agent.models import ReportSection, ResearchReport
 from material_platform.agent.state import AgentState
@@ -17,11 +17,8 @@ def write_report(
 ) -> AgentState:
     with tracer.span("write", findings=len(state.findings)):
         by_id = {item.evidence_id: item for item in state.evidence}
-        objective = (
-            state.request.objective
-            if state.request is not None
-            else state.plan.objective
-        )
+        objective = state.plan.objective
+        context = chat_context(state)
         sections: list[ReportSection] = []
         citations: list[Citation] = []
         for question in state.plan.questions:
@@ -35,6 +32,7 @@ def write_report(
                 question.question,
                 body,
                 named_llm(client, tracer, "write"),
+                context=context,
             )
             if drafted:
                 body = drafted
@@ -57,6 +55,7 @@ def write_report(
             objective,
             sections,
             named_llm(client, tracer, "summary"),
+            context=context,
         )
         text = _render(objective, sections, summary)
         state.report = ResearchReport(
@@ -100,6 +99,8 @@ def _summary(
     objective: str,
     sections: list[ReportSection],
     client: LlmClient | None,
+    *,
+    context: str = "",
 ) -> str:
     covered = [item.heading for item in sections if "No evidence" not in item.body]
     fallback = (
@@ -110,7 +111,9 @@ def _summary(
     if client is None:
         return fallback
     try:
-        payload = client.complete_json(for_summary(objective, sections))
+        payload = client.complete_json(
+            for_summary(objective, sections, context=context)
+        )
     except Exception:
         return fallback
     text = payload.get("summary")
@@ -120,12 +123,19 @@ def _summary(
 
 
 def _llm_section(
-    objective: str, heading: str, body: str, client: LlmClient | None
+    objective: str,
+    heading: str,
+    body: str,
+    client: LlmClient | None,
+    *,
+    context: str = "",
 ) -> str | None:
     if client is None:
         return None
     try:
-        payload = client.complete_json(for_write_section(objective, heading, body))
+        payload = client.complete_json(
+            for_write_section(objective, heading, body, context=context)
+        )
     except Exception:
         return None
     text = payload.get("body")

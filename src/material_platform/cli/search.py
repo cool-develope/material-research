@@ -63,7 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     offset = (args.page - 1) * args.page_size
     try:
         with runtime.session() as session:
-            page = DeepResearchService(session, runtime.index).search(
+            page = DeepResearchService(
+                session, runtime.index, runtime.store
+            ).search(
                 args.query,
                 offset=offset,
                 limit=args.page_size,
@@ -77,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         has_more=page.has_more,
         page=args.page,
         page_size=args.page_size,
+        page_count=page.page_count,
     )
 
 
@@ -86,6 +89,7 @@ def _print_page(
     has_more: bool,
     page: int,
     page_size: int,
+    page_count: int = 0,
 ) -> int:
     if not results:
         print("No matching materials.")
@@ -96,8 +100,12 @@ def _print_page(
             f"{index}. {hit.title}  {hit.material_type}  "
             f"{hit.root_path}  {hit.score:.2f}"
         )
-        if hit.siblings:
-            print(f"   also: {', '.join(hit.siblings)}")
-    if has_more:
+        if hit.snippet:
+            print(f"   {hit.snippet}")
+        if hit.keywords:
+            print(f"   keywords: {', '.join(hit.keywords)}")
+    if page_count > 1:
+        print(f"   page {page} of {page_count}")
+    elif has_more:
         print(f"   more: page {page + 1}")
     return 0

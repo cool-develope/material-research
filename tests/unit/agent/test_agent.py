@@ -50,20 +50,29 @@ def test_first_select_is_raw_query_and_spans_are_traced() -> None:
         "retrieve",
         "extract",
         "cover",
+        "gap",
         "findings",
         "write",
         "validate",
     ):
         assert required in names
     retrieve = next(span for span in tracer.spans if span.name == "retrieve")
-    assert retrieve.attrs.get("question_id") == "Q0"
+    assert retrieve.attrs.get("question_id") == "Q1"
     assert retrieve.attrs.get("query") == "handle_request"
+    retrieved = retrieve.attrs.get("output")
+    assert isinstance(retrieved, dict)
+    selected = retrieved.get("selected")
+    assert isinstance(selected, list) and selected
+    assert selected[0]["citation"] == "src/api.py lines 1-2"
+    assert "snippet" not in selected[0]
     plan = next(span for span in tracer.spans if span.name == "plan")
+    assert "<thread>" in str(plan.attrs.get("input"))
+    assert "Latest user message: handle_request" in str(plan.attrs.get("input"))
     output = plan.attrs.get("output")
     assert isinstance(output, dict)
     questions = output.get("questions")
     assert isinstance(questions, list) and questions
-    assert questions[0]["id"] == "Q0"
+    assert questions[0]["id"] == "Q1"
     assert "handle_request" in str(questions[0]["question"])
     assert any(event.name == "select" for event in tracer.events)
     done = next(event for event in tracer.events if event.name == "done")
@@ -127,7 +136,7 @@ def test_quick_mode_caps_selects_below_standard() -> None:
     report = ResearchAgent(
         select, tracer=RecordingTracer(), client=Planner(), mode="quick"
     ).ask("root question")
-    assert calls["n"] == 3
+    assert calls["n"] == 2
     assert calls["n"] < MAX_SELECT_CALLS
     assert report.text
 
@@ -158,7 +167,7 @@ def test_deep_mode_allows_more_selects_than_standard() -> None:
     report = ResearchAgent(
         select, tracer=RecordingTracer(), client=Planner(), mode="deep"
     ).ask("root question")
-    assert calls["n"] > MAX_SELECT_CALLS
+    assert calls["n"] == 8
     assert calls["n"] <= 16
     assert report.text
 
@@ -185,6 +194,8 @@ def test_ask_continues_thread() -> None:
     agent.ask("where is it defined", thread_id=thread)
     assert agent.last_state is not None
     assert [turn.query for turn in agent.last_state.conversation] == ["handle_request"]
+    assert agent.last_select_queries
+    assert "handle_request" in agent.last_select_queries[0]
     agent.ask("what else", thread_id=thread)
     assert agent.last_state is not None
     assert [turn.query for turn in agent.last_state.conversation] == [
@@ -231,16 +242,47 @@ def test_planner_sees_compact_request_not_prior_report() -> None:
     ):
         return (_hit("src/api.py", snippet=marker),)
 
-    agent = ResearchAgent(select, tracer=RecordingTracer(), client=Planner())
+    tracer = RecordingTracer()
+    agent = ResearchAgent(select, tracer=tracer, client=Planner())
     agent.ask("handle_request")
     first = len(prompts)
     agent.ask("where is it defined", thread_id=agent.last_thread_id)
     later = prompts[first:]
-    plan_prompts = [item for item in later if "Split this research request" in item]
+    plan_prompts = [
+        item
+        for item in later
+        if "You are the planner for a Deep Research system." in item
+    ]
     assert plan_prompts
     assert "handle_request" in plan_prompts[0]
+    assert "Latest user message: where is it defined" in plan_prompts[0]
+    assert "Past user: handle_request" in plan_prompts[0]
     assert marker not in plan_prompts[0]
     assert "# handle_request" not in plan_prompts[0]
+    names = [span.name for span in tracer.spans]
+    assert names.index("deep-research") < names.index("compact")
+    compact = next(span for span in tracer.spans if span.name == "compact")
+    compact_out = compact.attrs.get("output")
+    assert isinstance(compact_out, dict)
+    assert "Past user: handle_request" in str(compact_out.get("context"))
+    plan = next(
+        span
+        for span in reversed(tracer.spans)
+        if span.name == "plan"
+    )
+    assert "Past user: handle_request" in str(plan.attrs.get("input"))
+    assert "Latest user message: where is it defined" in str(plan.attrs.get("input"))
+    plan_gens = [
+        item
+        for item in tracer.generations
+        if item.name == "plan"
+        and "where is it defined" in str(item.attrs.get("prompt"))
+    ]
+    assert plan_gens
+    prompt = str(plan_gens[0].attrs["prompt"])
+    assert "Past user: handle_request" in prompt
+    assert "Latest user message: where is it defined" in prompt
+    assert "<thread>" in prompt
 
 
 def test_continue_state_compacts_older_turns() -> None:
@@ -257,7 +299,7 @@ def test_continue_state_compacts_older_turns() -> None:
         query="latest",
         plan=ResearchPlan(
             objective="latest",
-            questions=(ResearchQuestion(id="Q0", question="latest"),),
+            questions=(ResearchQuestion(id="Q1", question="latest"),),
         ),
         conversation=[ChatTurn(query=f"q{i}", answer=f"a{i}") for i in range(12)],
         request=ResearchRequest(objective="latest"),
@@ -279,8 +321,41 @@ def test_continue_state_compacts_older_turns() -> None:
     assert "UNIQUE_REPORT_MARKER" not in nxt.conversation[-1].answer
     assert nxt.summary is not None
     assert "q0" in nxt.summary.text
-    assert nxt.request is not None
-    assert nxt.request.objective == "new"
+    assert nxt.prior_research
+    assert "UNIQUE_REPORT_MARKER" not in nxt.prior_research
+
+
+def test_prior_turns_hydrate_plan_without_checkpoint() -> None:
+    queries: list[str] = []
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        queries.append(query)
+        return (_hit("src/api.py"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer())
+    agent.ask(
+        "where is it defined",
+        prior_turns=[ChatTurn(query="handle_request", answer="defined in api.py")],
+    )
+    assert queries
+    assert "handle_request" in queries[0]
+    assert agent.last_state is not None
+    assert [turn.query for turn in agent.last_state.conversation] == ["handle_request"]
+
+
+def test_pronoun_follow_up_looks_like_reference() -> None:
+    from material_platform.agent.memory import looks_like_reference
+
+    assert looks_like_reference("where is it defined")
+    assert looks_like_reference("compare them")
+    assert looks_like_reference("what else")
+    assert not looks_like_reference("what is QLoRA")
 
 
 def test_sqlite_checkpointer_continues_thread(tmp_path) -> None:
@@ -389,10 +464,13 @@ def test_store_recalls_compact_memories_on_reference() -> None:
     first = len(prompts)
     agent.ask("as we said, where is auth", thread_id=thread)
     plan_prompts = [
-        item for item in prompts[first:] if "Split this research request" in item
+        item
+        for item in prompts[first:]
+        if "You are the planner for a Deep Research system." in item
     ]
     assert plan_prompts
-    assert "Recalled memories:" in plan_prompts[0]
+    assert "handle_request" in plan_prompts[0]
+    assert "Latest user message: as we said, where is auth" in plan_prompts[0]
 
 
 def test_material_point_is_never_a_citation() -> None:
@@ -449,11 +527,11 @@ def test_report_sections_follow_questions() -> None:
         "Compare authentication"
     )
     ids = [section.question_id for section in report.sections]
-    assert ids[0] == "Q0"
+    assert ids[0] == "Q1"
     assert "Q1" in ids
     assert "Q2" in ids
-    assert any(event.name == "follow_up" for event in tracer.events) or any(
-        span.name == "follow_up" for span in tracer.spans
+    assert any(event.name == "gap" for event in tracer.events) or any(
+        span.name == "gap" for span in tracer.spans
     )
     assert not any(section.heading.startswith("M") for section in report.sections)
     from material_platform.agent.graph import run_agent
@@ -464,7 +542,7 @@ def test_report_sections_follow_questions() -> None:
         tracer=RecordingTracer(),
         client=Planner(),
     )
-    assert state.questions["Q0"].status in {"covered", "researching"}
+    assert state.questions["Q1"].status in {"covered", "researching"}
     assert state.questions["Q2"].status in {"gap", "unresolved", "covered"}
     assert state.questions["Q2"].iterations >= 1
 
@@ -611,11 +689,133 @@ def test_graph_is_compiled_langgraph() -> None:
         "plan",
         "retrieve",
         "extract",
-        "cover",
-        "follow_up",
+        "gap",
         "findings",
         "write",
         "validate",
     )
     for name in required:
         assert name in nodes
+
+
+def test_skip_retrieval_reuses_prior_findings() -> None:
+    calls = {"n": 0}
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        calls["n"] += 1
+        return (_hit("src/api.py"),)
+
+    class Client:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            if "You are the planner for a Deep Research system." in prompt:
+                if "shorter summary" in prompt:
+                    return {
+                        "intent": "rewrite",
+                        "objective": "Shorter summary of handle_request",
+                        "questions": [],
+                        "needs_retrieval": False,
+                    }
+                return {
+                    "intent": "research",
+                    "objective": "handle_request",
+                    "questions": [{"id": "Q1", "question": "handle_request"}],
+                    "needs_retrieval": True,
+                }
+            return {}
+
+    agent = ResearchAgent(select, tracer=RecordingTracer(), client=Client())
+    agent.ask("handle_request")
+    first = calls["n"]
+    assert first >= 1
+    report = agent.ask("give me a shorter summary", thread_id=agent.last_thread_id)
+    assert calls["n"] == first
+    assert agent.last_state is not None
+    assert agent.last_state.plan.needs_retrieval is False
+    assert agent.last_state.findings
+    assert report.text
+
+
+def test_gap_extra_retrieve_uses_remaining_budget() -> None:
+    calls = {"n": 0}
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        calls["n"] += 1
+        if "evidence" in query:
+            return (_hit("src/api.py"),)
+        return ()
+
+    class Client:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            if "You are the planner for a Deep Research system." in prompt:
+                return {
+                    "intent": "research",
+                    "objective": "auth",
+                    "questions": [{"id": "Q1", "question": "auth"}],
+                    "needs_retrieval": True,
+                }
+            if "Check whether the current findings" in prompt:
+                return {"answered": False, "missing": ["auth evidence"]}
+            return {}
+
+    agent = ResearchAgent(
+        select, tracer=RecordingTracer(), client=Client(), mode="quick"
+    )
+    agent.ask("auth")
+    assert calls["n"] == 2
+    assert calls["n"] <= 3
+    assert "auth evidence" in agent.last_select_queries
+
+
+def test_writer_prompt_includes_chat_context() -> None:
+    prompts: list[str] = []
+
+    class Client:
+        def complete_json(self, prompt: str) -> dict[str, object]:
+            prompts.append(prompt)
+            if "You are the planner for a Deep Research system." in prompt:
+                return {
+                    "intent": "research",
+                    "objective": "handle_request",
+                    "questions": [{"id": "Q1", "question": "handle_request"}],
+                    "needs_retrieval": True,
+                }
+            if "Rewrite this section" in prompt:
+                return {"body": "defined in api.py (src/api.py lines 1-2)"}
+            if "executive summary" in prompt:
+                return {"summary": "handle_request is in api.py."}
+            return {}
+
+    def select(
+        query: str,
+        *,
+        limit: int = 5,
+        material_type: str | None = None,
+        **_: object,
+    ):
+        return (_hit("src/api.py"),)
+
+    agent = ResearchAgent(select, tracer=RecordingTracer(), client=Client())
+    agent.ask("handle_request")
+    agent.ask("where is it defined", thread_id=agent.last_thread_id)
+    write_prompts = [
+        item
+        for item in prompts
+        if "Rewrite this section" in item or "executive summary" in item
+    ]
+    assert write_prompts
+    assert any(
+        "handle_request" in item and "where is it defined" in item
+        for item in write_prompts
+    )
