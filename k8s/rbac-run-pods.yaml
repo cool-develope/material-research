@@ -1,0 +1,27 @@
+# Daemon in dagster-system creates ephemeral run Jobs in the project namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dagster-run-launcher
+  namespace: material-research
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status", "services", "configmaps", "secrets", "events"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dagster-run-launcher
+  namespace: material-research
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dagster-run-launcher
+subjects:
+  - kind: ServiceAccount
+    name: PLACEHOLDER_DAEMON_SA
+    namespace: dagster-system

@@ -34,7 +34,7 @@ if [[ ! -f k8s/images.tar.zst ]]; then
 fi
 zstd -dc k8s/images.tar.zst | sudo ctr -n k8s.io images import -
 if [[ -f docker/images.tar.zst ]]; then
-  echo "== also import compose/app images (material-platform, busybox, postgres) =="
+  echo "== import compose + Dagster platform + project images =="
   zstd -dc docker/images.tar.zst | sudo ctr -n k8s.io images import -
 fi
 
@@ -58,8 +58,7 @@ echo
 echo "Load app / compose images if not already:"
 echo "  ${BUNDLE}/scripts/install-offline.sh"
 echo
-echo "Then install Dagster:"
-echo "  helm upgrade --install dagster ${BUNDLE}/k8s/charts/dagster-*.tgz \\"
-echo "    -f ${BUNDLE}/k8s/values.yaml \\"
-echo "    --set postgresql.postgresqlHost=YOUR_PG_HOST \\"
-echo "    --set postgresql.postgresqlPassword=YOUR_PG_PASSWORD"
+echo "Then Dagster (official control plane + this project as a code location):"
+echo "  CREATE DATABASE dagster;  -- on PG_HOST, not the material / langfuse DBs"
+echo "  PG_HOST=YOUR_PG_HOST PG_PASSWORD=YOUR_PG_PASSWORD \\"
+echo "    ${BUNDLE}/scripts/install-dagster.sh"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build airgap-release/: wheels, web UI, compose/app images, Dagster
-# Helm charts, then kubeadm .deb files + control-plane images.
+# Build airgap-release/: wheels, web UI, compose + project image,
+# official Dagster control-plane image, Helm charts, kubeadm host deps.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -56,6 +56,7 @@ cp "$ROOT/workspace.yaml" "$OUT/app/workspace.yaml"
 cp "$ROOT/alembic.ini" "$OUT/app/alembic.ini"
 cp "$ROOT/scripts/airgap/"*.sh "$OUT/scripts/"
 chmod +x "$OUT/scripts/"*.sh
+cp "$ROOT/docs/airgap.md" "$OUT/docs-airgap.md"
 
 echo "== freeze Python deps (runtime + k8s extra) =="
 uv export --frozen --no-dev --extra k8s --no-emit-project --no-hashes \
@@ -70,10 +71,14 @@ if [[ "$SKIP_WHEELS" != "1" ]]; then
   uv venv --seed /tmp/mp-airgap-download
   /tmp/mp-airgap-download/bin/pip install -q --upgrade pip
   PIP_DL=(/tmp/mp-airgap-download/bin/pip download -d "$OUT/python/wheels")
+  # brotli 1.2.0 (and a few others) publish manylinux_2_17 / manylinux2014,
+  # not manylinux_2_28. pip --platform is exact, so list all three.
   set +e
   "${PIP_DL[@]}" \
     --python-version 3.12 \
     --platform manylinux_2_28_x86_64 \
+    --platform manylinux_2_17_x86_64 \
+    --platform manylinux2014_x86_64 \
     --implementation cp \
     --abi cp312 \
     --only-binary=:all: \
@@ -138,12 +143,14 @@ fi
 
 if [[ "$SKIP_K8S" != "1" ]]; then
   echo "== Dagster Helm charts ${DAGSTER_VER} =="
+  mkdir -p "$OUT/k8s"
   curl -fsSL -o "$OUT/k8s/charts/dagster-${DAGSTER_VER}.tgz" \
     "https://dagster-io.github.io/helm/dagster-${DAGSTER_VER}.tgz"
   curl -fsSL -o "$OUT/k8s/charts/dagster-user-deployments-${DAGSTER_VER}.tgz" \
     "https://dagster-io.github.io/helm/dagster-user-deployments-${DAGSTER_VER}.tgz"
-  cp "$ROOT/k8s/values.yaml" "$OUT/k8s/values.yaml"
-  sed -i "s/1.13.20/${DAGSTER_VER}/g" "$OUT/k8s/values.yaml"
+  cp "$ROOT/k8s/"*.yaml "$OUT/k8s/"
+  sed -i "s/tag: \"1.13.20\"/tag: \"${DAGSTER_VER}\"/g" \
+    "$OUT/k8s/values-platform.yaml"
 fi
 
 retag_if_present() {
@@ -181,7 +188,6 @@ if [[ "$SKIP_DOCKER" != "1" ]]; then
   echo "== compose images + app build =="
   while read -r img; do
     [[ "$img" == material-platform:* ]] && continue
-    [[ "$img" == *"dagster-"* ]] && continue
     pull_if_missing "$img"
   done < <(docker compose -f "$ROOT/docker-compose.yml" config --images | sort -u)
 
@@ -191,8 +197,29 @@ if [[ "$SKIP_DOCKER" != "1" ]]; then
     | sort -u >"$OUT/docker/images.txt"
 
   if [[ "$SKIP_K8S" != "1" ]]; then
-    pull_if_missing docker.io/busybox:1.28
-    echo "docker.io/busybox:1.28" >>"$OUT/docker/images.txt"
+    pull_retry() {
+      local img="$1" n
+      if docker image inspect "$img" >/dev/null 2>&1; then
+        echo "have $img"
+        return 0
+      fi
+      for n in 1 2 3 4 5; do
+        echo "pull $img attempt $n"
+        if docker pull "$img"; then
+          return 0
+        fi
+        sleep 5
+      done
+      echo "failed to pull $img" >&2
+      return 1
+    }
+    echo "== Dagster control-plane image (not the project image) =="
+    pull_retry "docker.io/dagster/dagster-celery-k8s:${DAGSTER_VER}"
+    pull_retry docker.io/busybox:1.28
+    {
+      echo "docker.io/dagster/dagster-celery-k8s:${DAGSTER_VER}"
+      echo "docker.io/busybox:1.28"
+    } >>"$OUT/docker/images.txt"
     sort -u "$OUT/docker/images.txt" -o "$OUT/docker/images.txt"
   fi
 
@@ -224,12 +251,13 @@ fi
 cat >"$OUT/README.md" <<EOF
 # Material Platform deps bundle $VERSION
 
-See the copy of the runbook in the repo: docs/airgap.md
+See docs-airgap.md (repo docs/airgap.md).
 
-Kubernetes host debs + Helm. Compose images + \`material-platform:${VERSION}\`.
-Dagster Helm chart: ${DAGSTER_VER}. Docker Engine is not bundled.
+Shared Dagster control plane: \`docker.io/dagster/dagster-celery-k8s:${DAGSTER_VER}\`.
+This project code location: \`material-platform:${VERSION}\`.
+Docker Engine is not bundled.
 
-## Compose only
+## Compose only (local shortcut)
 
 \`\`\`bash
 sha256sum -c SHA256SUMS
@@ -238,27 +266,28 @@ sha256sum -c SHA256SUMS
 ./scripts/start.sh
 \`\`\`
 
-## Kubernetes for Dagster
+## Kubernetes (shared instance + this project)
 
 \`\`\`bash
 sha256sum -c SHA256SUMS
 ./scripts/install-k8s-offline.sh
 # then the printed kubeadm init + flannel apply
 ./scripts/install-offline.sh
-helm upgrade --install dagster k8s/charts/dagster-${DAGSTER_VER}.tgz -f k8s/values.yaml \\
-  --set postgresql.postgresqlHost=YOUR_PG_HOST \\
-  --set postgresql.postgresqlPassword=YOUR_PG_PASSWORD
+# CREATE DATABASE dagster;  (not material / langfuse)
+PG_HOST=YOUR_PG_HOST PG_PASSWORD=YOUR_PG_PASSWORD ./scripts/install-dagster.sh
 \`\`\`
 
 | Path | Contents |
 | --- | --- |
-| \`python/wheels/\` | pip --no-index --find-links |
+| \`python/wheels/\` | this project + dagster-k8s (code location) |
 | \`web/\` | Vite source + node_modules.tar.gz |
-| \`docker/images.tar.zst\` | compose + material-platform:${VERSION} |
-| \`k8s/charts/\` | Dagster Helm |
+| \`docker/images.tar.zst\` | compose + material-platform + dagster-celery-k8s |
+| \`k8s/charts/\` | dagster + dagster-user-deployments |
+| \`k8s/values-platform.yaml\` | webserver / daemon |
+| \`k8s/values-material-research.yaml\` | this code location |
 | \`k8s/images.tar.zst\` | kubeadm + Flannel |
-| \`ubuntu/k8s-debs/\` | kubeadm kubelet kubectl cri-tools kubernetes-cni + runtime |
-| \`k8s/bin/helm\` | Helm (no official k8s .deb) |
+| \`ubuntu/k8s-debs/\` | kubeadm kubelet kubectl + runtime |
+| \`k8s/bin/helm\` | Helm |
 
 Point \`LLM_BASE_URL\` / \`EMBEDDER=http\` at servers on your network.
 EOF

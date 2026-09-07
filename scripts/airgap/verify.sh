@@ -28,12 +28,21 @@ require web/node_modules.tar.gz
 require docker/images.tar.zst
 require docker/images.txt
 require k8s/charts
-require k8s/values.yaml
+require k8s/values-platform.yaml
+require k8s/values-material-research.yaml
+require k8s/rbac-run-pods.yaml
 require k8s/images.tar.zst
 require k8s/kubeadm-images.txt
 require k8s/manifests/kube-flannel.yml
 require k8s/bin/helm
+require docs-airgap.md
 require ubuntu/k8s-debs
+if [[ -f docker/images.txt ]] && ! grep -q 'dagster-celery-k8s' docker/images.txt; then
+  echo "MISSING dagster-celery-k8s in docker/images.txt"
+  missing=1
+else
+  echo "ok docker/images.txt lists dagster-celery-k8s"
+fi
 if ! compgen -G "ubuntu/k8s-debs/kubeadm_*.deb" >/dev/null; then
   echo "MISSING ubuntu/k8s-debs/kubeadm_*.deb"
   missing=1

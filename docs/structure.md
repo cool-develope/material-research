@@ -6,7 +6,7 @@ docker/                   Container entrypoint + wheels Dockerfile
 Dockerfile                App image (Dagster + `mp serve`)
 docs/                     Architecture, setup, env, pipeline, agent, Dagster, air-gap
 migrations/               Alembic (identities and state)
-k8s/                      Dagster Helm values overlay
+k8s/                      Helm: shared platform + this code location
 scripts/                  download_bge.py, e2e_research.py, airgap/
 src/material_platform/
   agent/                  LangGraph Deep Research nodes

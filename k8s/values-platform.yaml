@@ -1,0 +1,53 @@
+# Shared Dagster control plane (webserver + daemon).
+# Official image only — no project libraries.
+# Code locations are separate Helm releases (see values-material-research.yaml).
+#
+#   helm upgrade --install dagster k8s/charts/dagster-*.tgz \
+#     -n dagster-system --create-namespace -f k8s/values-platform.yaml
+
+postgresql:
+  enabled: false
+  postgresqlHost: ""
+  postgresqlDatabase: dagster
+  postgresqlUsername: material
+  postgresqlPassword: material
+  image:
+    registry: docker.io
+    repository: library/postgres
+    tag: "16.15"
+    pullPolicy: IfNotPresent
+
+dagsterWebserver:
+  image:
+    repository: docker.io/dagster/dagster-celery-k8s
+    tag: "1.13.20"
+    pullPolicy: IfNotPresent
+  workspace:
+    enabled: true
+    servers:
+      - host: material-research.material-research.svc.cluster.local
+        port: 3030
+        name: material-research
+
+dagsterDaemon:
+  image:
+    repository: docker.io/dagster/dagster-celery-k8s
+    tag: "1.13.20"
+    pullPolicy: IfNotPresent
+
+busybox:
+  image:
+    repository: docker.io/busybox
+    tag: "1.28"
+    pullPolicy: IfNotPresent
+
+runLauncher:
+  type: K8sRunLauncher
+  config:
+    k8sRunLauncher:
+      imagePullPolicy: IfNotPresent
+      jobNamespace: material-research
+
+dagster-user-deployments:
+  enabled: true
+  enableSubchart: false

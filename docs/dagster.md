@@ -173,6 +173,14 @@ Named keys like `document_extraction: 4` are **not** valid in this Dagster versi
 
 When embed/rerank are HTTP, scale them on that box. Local BGE still runs in the worker — keep `default_limit` modest until then.
 
+## Image
+
+**Kubernetes:** shared official `docker.io/dagster/dagster-celery-k8s` (webserver + daemon). This repo is one code location / run image (`material-platform`, `dagster-k8s` extra). Do not put other projects into that image.
+
+**Compose:** local shortcut — `dagster-web` / `dagster-daemon` use `material-platform` on one box.
+
+Air-gap Helm: [Air-gap](airgap.md) → `scripts/install-dagster.sh` (`dagster-system` + `material-research`).
+
 ## Compose (UI + daemon)
 
 ```bash
@@ -181,10 +189,10 @@ docker compose up -d --build
 uv run alembic upgrade head
 ```
 
-| Service | Role |
-| --- | --- |
-| `dagster-web` | UI at [http://127.0.0.1:3000](http://127.0.0.1:3000) |
-| `dagster-daemon` | Sensors and run launcher |
+| Service | Image | Role |
+| --- | --- | --- |
+| `dagster-web` | `material-platform:0.1.0` | UI at [http://127.0.0.1:3000](http://127.0.0.1:3000) |
+| `dagster-daemon` | `material-platform:0.1.0` | Sensors and run launcher |
 
 Inbox: host `./inbox` → container `/inbox` (`INGEST_DIRECTORY`). Instance config: `./dagster.yaml` → `/opt/dagster/dagster.yaml`. Run history: volume `dagster-home`.
 
