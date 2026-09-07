@@ -76,6 +76,7 @@ The archive stays on the inbox. We keep material bytes, extract JSON, pipeline s
 | [docs/inference.md](docs/inference.md) | Local BGE vs HTTP embed / rerank |
 | [docs/structure.md](docs/structure.md) | Packages and files |
 | [docs/todos.md](docs/todos.md) | Open follow-ups |
+| [docs/airgap.md](docs/airgap.md) | Offline install bundle |
 
 ## License
 

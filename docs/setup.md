@@ -116,7 +116,7 @@ export INGEST_DIRECTORY="$(pwd)/inbox"
 uv run dagster dev -w workspace.yaml
 ```
 
-Config: [Dagster](dagster.md). First run: [Inbox](inbox.md).
+Config: [Dagster](dagster.md). First run: [Inbox](inbox.md). Air-gap USB bundle: [Air-gap](airgap.md).
 
 ## Eval
 

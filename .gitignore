@@ -23,3 +23,6 @@ htmlcov/
 # Vite UI
 web/node_modules/
 web/dist/
+
+# Air-gap bundle (wheels, Node modules, images, Helm charts). Built by scripts/airgap/prepare-online.sh.
+/airgap-release/
