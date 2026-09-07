@@ -81,7 +81,19 @@ for name, (version, filename) in sorted(picked.items()):
     url = f"{repo}/{filename}"
     out = dest / Path(filename).name
     print(f"GET {name} {version} -> {out.name}", flush=True)
-    urllib.request.urlretrieve(url, out)
+    last = None
+    for attempt in range(1, 6):
+        try:
+            urllib.request.urlretrieve(url, out)
+            last = None
+            break
+        except Exception as exc:
+            last = exc
+            print(f"retry {attempt} {out.name}: {exc}", flush=True)
+            if out.exists():
+                out.unlink()
+    if last:
+        raise last
 PY
 
 echo "== Ubuntu runtime debs (kubelet Depends) =="

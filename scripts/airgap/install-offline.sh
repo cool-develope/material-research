@@ -48,5 +48,7 @@ if [[ ! -f app/.env ]]; then
 fi
 
 mkdir -p "$BUNDLE/inbox"
-echo "app images loaded. For a new cluster: ./scripts/install-k8s-offline.sh"
-echo "Dagster: helm upgrade --install dagster k8s/charts/dagster-*.tgz -f k8s/values.yaml"
+echo "images loaded (control plane: dagster-celery-k8s; project: material-platform)."
+echo "Compose: ./scripts/start.sh"
+echo "New cluster: ./scripts/install-k8s-offline.sh"
+echo "Helm: PG_HOST=... ./scripts/install-dagster.sh"

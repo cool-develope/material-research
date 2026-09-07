@@ -1,0 +1,32 @@
+# This repo as one Dagster code location (project image).
+# Control plane is values-platform.yaml — do not put project deps there.
+#
+#   helm upgrade --install material-research \
+#     k8s/charts/dagster-user-deployments-*.tgz \
+#     -n material-research --create-namespace \
+#     -f k8s/values-material-research.yaml
+
+includeInstance: false
+
+deployments:
+  - name: material-research
+    image:
+      repository: material-platform
+      tag: "0.1.0"
+      pullPolicy: IfNotPresent
+    dagsterApiGrpcArgs:
+      - "-m"
+      - "defs.definitions"
+    port: 3030
+    replicaCount: 1
+    includeConfigInLaunchedRuns:
+      enabled: true
+    envSecrets:
+      - name: material-research-env
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 512Mi
