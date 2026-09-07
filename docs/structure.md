@@ -2,11 +2,12 @@
 
 ```text
 defs/                     Dagster jobs, sensors, PlatformResource
-docker/                   Container entrypoint
-Dockerfile                Dagster web + daemon image
-docs/                     Architecture, setup, env, pipeline, agent, Dagster, …
+docker/                   Container entrypoint + wheels Dockerfile
+Dockerfile                App image (Dagster + `mp serve`)
+docs/                     Architecture, setup, env, pipeline, agent, Dagster, air-gap
 migrations/               Alembic (identities and state)
-scripts/                  download_bge.py, e2e_research.py
+k8s/                      Dagster Helm values overlay
+scripts/                  download_bge.py, e2e_research.py, airgap/
 src/material_platform/
   agent/                  LangGraph Deep Research nodes
   analysis/               Deterministic / LLM MaterialAnalysis

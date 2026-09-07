@@ -15,5 +15,6 @@ Material Platform discovers independent research materials from files, directori
 | [Inbox](inbox.md) | Source drop, first run, what we do not keep |
 | [Inference](inference.md) | Local BGE vs HTTP embed / rerank / LLM |
 | [Todos](todos.md) | Open follow-ups |
+| [Air-gap](airgap.md) | Offline bundle: wheels, web, images, kubeadm debs, Dagster Helm |
 
 Start at [Setup](setup.md). Copy `.env.example` to `.env` before using Postgres, MinIO, or Langfuse.

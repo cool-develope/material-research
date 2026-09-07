@@ -3,10 +3,12 @@
 # for checkpoints and Qdrant (collection `langgraph`) for the agent store.
 # ClickHouse is Langfuse-only (traces). Redis is Langfuse queue plus
 # query-embedding cache for mp serve.
-# UI: Langfuse http://localhost:3100, Dagster http://localhost:3000.
+# UI: Langfuse http://localhost:3100, Dagster http://localhost:3000,
+# API http://localhost:8000.
 # ClickHouse native port is
 # not published — it would collide with MinIO on 9000. Images are Langfuse v4
 # (matches Python SDK 4.x; same Postgres/ClickHouse/Redis/MinIO as v3).
+# Tags are pinned for air-gap export.
 
 x-langfuse-env: &langfuse-env
   NEXTAUTH_URL: http://localhost:3100
@@ -81,7 +83,7 @@ x-langfuse-depends: &langfuse-depends
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.15
     environment:
       POSTGRES_USER: material
       POSTGRES_PASSWORD: material
@@ -99,7 +101,7 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: minio
@@ -134,7 +136,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7
+    image: redis:7.4.11
     command: ["redis-server", "--requirepass", "langfuse", "--maxmemory-policy", "noeviction"]
     ports:
       - "6379:6379"
@@ -164,7 +166,7 @@ services:
       start_period: 10s
 
   postgres-db-init:
-    image: postgres:16
+    image: postgres:16.15
     depends_on:
       postgres:
         condition: service_healthy
@@ -203,7 +205,7 @@ services:
     restart: "no"
 
   minio-init:
-    image: minio/mc
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
@@ -216,7 +218,7 @@ services:
     restart: "no"
 
   langfuse-web:
-    image: docker.langfuse.com/langfuse/langfuse:4
+    image: docker.langfuse.com/langfuse/langfuse:4.27.0
     depends_on: *langfuse-depends
     ports:
       - "3100:3000"
@@ -236,12 +238,24 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: langfuselocal
 
   langfuse-worker:
-    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.27.0
     depends_on: *langfuse-depends
     environment:
       <<: *langfuse-env
 
+  api:
+    image: material-platform:0.1.0
+    build: .
+    command: ["mp", "serve", "--postgres", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      <<: *dagster-env
+    ports:
+      - "8000:8000"
+    depends_on: *dagster-depends
+
   dagster-web:
+    image: material-platform:0.1.0
     build: .
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
     env_file: .env
@@ -268,6 +282,7 @@ services:
       start_period: 20s
 
   dagster-daemon:
+    image: material-platform:0.1.0
     build: .
     command: ["dagster-daemon", "run"]
     env_file: .env

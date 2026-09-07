@@ -27,6 +27,12 @@ dependencies = [
     "redis>=8.1.0",
 ]
 
+[project.optional-dependencies]
+k8s = [
+    "dagster-k8s==0.29.20",
+    "dagster-postgres==0.29.20",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
